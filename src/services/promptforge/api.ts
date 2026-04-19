@@ -43,10 +43,10 @@ import type {
   PfScope,
   PfTargetType,
 } from "./types";
+import { STRICT_BACKEND, createStrictBackendError, logBackendFallback } from "./config";
 
 const API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | undefined)?.replace(/\/+$/, "") || "http://localhost:8090";
 const BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || "/console/bootstrap";
-const STRICT_BACKEND = String(import.meta.env.VITE_PROMPTFORGE_STRICT_BACKEND || "").toLowerCase() === "true";
 const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
 
 let lastHydrationAt = 0;
@@ -78,6 +78,16 @@ async function postJson<T>(path: string, payload?: unknown, method: "POST" | "PA
   });
 }
 
+function buildQueryPath(path: string, params: Record<string, unknown>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    query.set(key, String(value));
+  }
+  const qs = query.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 async function ensureHydrated(force = false): Promise<void> {
   const stale = Date.now() - lastHydrationAt > HYDRATION_TTL_MS;
   if (!force && !stale && lastHydrationAt > 0) return;
@@ -106,8 +116,9 @@ async function ensureHydrated(force = false): Promise<void> {
       }
       lastHydrationAt = Date.now();
     } catch (error) {
-      if (STRICT_BACKEND) throw error;
-      // Keep deterministic mock data when backend hydration is unavailable.
+      if (STRICT_BACKEND) throw createStrictBackendError(error);
+      logBackendFallback("promptforge bootstrap hydration", error);
+      lastHydrationAt = Date.now();
     } finally {
       hydrationInFlight = null;
     }
@@ -121,11 +132,6 @@ const delay = async (ms = 180) => {
   await ensureHydrated();
   return new Promise<void>((r) => setTimeout(r, ms));
 };
-
-function paginate<T>(rows: T[], { page = 1, pageSize = 25 }: PageParams): PageResult<T> {
-  const start = (page - 1) * pageSize;
-  return { rows: rows.slice(start, start + pageSize), total: rows.length, page, pageSize };
-}
 
 // ──────────────────────────── Query keys
 export const qk = {
@@ -180,7 +186,8 @@ export async function getHealth(): Promise<HealthSnapshot> {
       })),
     };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge health check", error);
     await delay(80);
     return healthSnapshot;
   }
@@ -203,20 +210,18 @@ export interface IntakeFilters extends PageParams {
 
 export async function listIntakeNotes(f: IntakeFilters = {}): Promise<PageResult<IntakeNote>> {
   await delay();
-  let rows = [...intakeNotes];
-  if (f.projectId) rows = rows.filter((r) => r.project_id === f.projectId);
-  if (f.status) rows = rows.filter((r) => r.status === f.status);
-  if (typeof f.watchEligible === "boolean") rows = rows.filter((r) => r.watch_eligible === f.watchEligible);
-  if (f.sourceDevice) rows = rows.filter((r) => (r.source_device || "").includes(f.sourceDevice!));
-  if (f.search) {
-    const q = f.search.toLowerCase();
-    rows = rows.filter((r) => r.note_relative_path.toLowerCase().includes(q) || r.body_text.toLowerCase().includes(q));
-  }
-  if (f.withSkipReason) {
-    rows = rows.filter((r) => r.metadata_json?.eligibility_reason || r.metadata_json?.skip_cause);
-  }
-  rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  return paginate(rows, f);
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 25;
+  return fetchJson<PageResult<IntakeNote>>(buildQueryPath("/console/intake", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    project_id: f.projectId,
+    status: f.status,
+    watch_eligible: f.watchEligible,
+    source_device: f.sourceDevice,
+    search: f.search,
+    with_skip_reason: f.withSkipReason,
+  }));
 }
 
 export async function getIntakeNote(id: string): Promise<IntakeNote | undefined> {
@@ -274,15 +279,15 @@ export interface PromptFilters extends PageParams {
 
 export async function listPromptGenerations(f: PromptFilters = {}): Promise<PageResult<PromptGeneration>> {
   await delay();
-  let rows = [...promptGenerations];
-  if (f.status) rows = rows.filter((r) => r.status === f.status);
-  if (typeof f.requiresReview === "boolean") rows = rows.filter((r) => r.requires_review === f.requiresReview);
-  if (f.search) {
-    const q = f.search.toLowerCase();
-    rows = rows.filter((r) => r.id.includes(q) || r.prompt_type.includes(q) || r.intake_note_id.includes(q));
-  }
-  rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
-  return paginate(rows, f);
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 25;
+  return fetchJson<PageResult<PromptGeneration>>(buildQueryPath("/console/prompts", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    status: f.status,
+    requires_review: f.requiresReview,
+    search: f.search,
+  }));
 }
 
 export async function getPromptGeneration(id: string): Promise<PromptGeneration | undefined> {
@@ -303,15 +308,14 @@ export interface DeliveryFilters extends PageParams {
 
 export async function listDeliveries(f: DeliveryFilters = {}): Promise<PageResult<Delivery & { retry_candidate: boolean }>> {
   await delay();
-  let rows = deliveries.map((d) => ({ ...d, retry_candidate: d.status === "failed" && d.retry_count < 5 }));
-  if (f.status) rows = rows.filter((r) => r.status === f.status);
-  if (f.failedOnly) rows = rows.filter((r) => r.status === "failed");
-  if (f.search) {
-    const q = f.search.toLowerCase();
-    rows = rows.filter((r) => r.id.includes(q) || r.prompt_generation_id.includes(q));
-  }
-  rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
-  return paginate(rows, f);
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 25;
+  return fetchJson<PageResult<Delivery & { retry_candidate: boolean }>>(buildQueryPath("/console/deliveries", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    status: f.failedOnly ? "failed" : f.status,
+    search: f.search,
+  }));
 }
 
 export async function getDelivery(id: string): Promise<Delivery | undefined> {
@@ -399,15 +403,15 @@ export interface TermFilters extends PageParams {
 
 export async function listTerms(f: TermFilters = {}): Promise<PageResult<TermDictionaryEntry>> {
   await delay();
-  let rows = [...termDictionary];
-  if (f.scope) rows = rows.filter((r) => r.scope === f.scope);
-  if (f.projectId) rows = rows.filter((r) => r.project_id === f.projectId);
-  if (f.search) {
-    const q = f.search.toLowerCase();
-    rows = rows.filter((r) => r.source_term.toLowerCase().includes(q) || r.normalized_term.toLowerCase().includes(q));
-  }
-  rows.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
-  return paginate(rows, f);
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 25;
+  return fetchJson<PageResult<TermDictionaryEntry>>(buildQueryPath("/console/dictionary", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    scope: f.scope,
+    project_id: f.projectId,
+    search: f.search,
+  }));
 }
 
 // ──────────────────────────── Templates (Q15)
@@ -419,12 +423,17 @@ export interface TemplateFilters extends PageParams {
 }
 export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult<PromptTemplate>> {
   await delay();
-  let rows = [...promptTemplates];
-  if (f.activeOnly) rows = rows.filter((r) => r.is_active);
-  if (f.promptType) rows = rows.filter((r) => r.prompt_type === f.promptType);
-  if (f.scope) rows = rows.filter((r) => r.scope === f.scope);
-  if (f.projectId) rows = rows.filter((r) => r.project_id === f.projectId);
-  return paginate(rows, f);
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 25;
+  return fetchJson<PageResult<PromptTemplate>>(buildQueryPath("/console/templates", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    prompt_type: f.promptType,
+    scope: f.scope,
+    project_id: f.projectId,
+    active_only: f.activeOnly ? true : undefined,
+    search: f.search,
+  }));
 }
 
 // ──────────────────────────── Targets (Q16)
@@ -444,19 +453,19 @@ export interface LogFilters extends PageParams {
 }
 export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>> {
   await delay(120);
-  let rows = [...logs];
-  if (f.service) rows = rows.filter((r) => r.service === f.service);
-  if (f.level) rows = rows.filter((r) => r.level === f.level);
-  if (f.intakeNoteId) rows = rows.filter((r) => r.intake_note_id === f.intakeNoteId);
-  if (f.utteranceId) rows = rows.filter((r) => r.utterance_id === f.utteranceId);
-  if (f.promptGenerationId) rows = rows.filter((r) => r.prompt_generation_id === f.promptGenerationId);
-  if (f.deliveryId) rows = rows.filter((r) => r.delivery_id === f.deliveryId);
-  if (f.search) {
-    const q = f.search.toLowerCase();
-    rows = rows.filter((r) => r.message.toLowerCase().includes(q));
-  }
-  rows.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
-  return paginate(rows, { page: f.page, pageSize: f.pageSize ?? 200 });
+  const page = f.page ?? 1;
+  const pageSize = f.pageSize ?? 200;
+  return fetchJson<PageResult<LogEntry>>(buildQueryPath("/console/logs", {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+    source: f.service,
+    level: f.level,
+    intake_note_id: f.intakeNoteId,
+    utterance_id: f.utteranceId,
+    prompt_generation_id: f.promptGenerationId,
+    delivery_id: f.deliveryId,
+    search: f.search,
+  }));
 }
 
 export async function getErrorFingerprints(limit = 10) {
