@@ -105,7 +105,7 @@ interface BackendPaginatedResponse<T> {
   _items?: T[];
 }
 
-function adaptPageResult<T>(raw: BackendPaginatedResponse<T>, itemsKey: string, pageSize: number): PageResult<T> {
+export function adaptPageResult<T>(raw: BackendPaginatedResponse<T>, itemsKey: string, pageSize: number): PageResult<T> {
   const rows = (raw[itemsKey] as T[] | undefined) ?? [];
   const { total, limit, offset } = raw.pagination;
   const page = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
