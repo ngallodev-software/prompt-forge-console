@@ -1,6 +1,5 @@
-// Typed service layer. Currently backed by mock data.
-// To wire to real backend: replace each function body with fetch() to your API.
-// Query keys are structured per entity for predictable invalidation.
+// Typed service layer with runtime backend hydration.
+// Contract-first: function signatures and query key shapes stay stable for UI pages.
 
 import {
   intakeNotes,
@@ -45,8 +44,83 @@ import type {
   PfTargetType,
 } from "./types";
 
-// Simulated network delay
-const delay = (ms = 180) => new Promise((r) => setTimeout(r, ms));
+const API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | undefined)?.replace(/\/+$/, "") || "http://localhost:8090";
+const BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || "/console/bootstrap";
+const STRICT_BACKEND = String(import.meta.env.VITE_PROMPTFORGE_STRICT_BACKEND || "").toLowerCase() === "true";
+const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
+
+let lastHydrationAt = 0;
+let hydrationInFlight: Promise<void> | null = null;
+
+function replaceArrayInPlace<T>(target: T[], next?: unknown) {
+  if (!Array.isArray(next)) return;
+  target.splice(0, target.length, ...(next as T[]));
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} for ${path}`);
+  }
+  return (await res.json()) as T;
+}
+
+async function postJson<T>(path: string, payload?: unknown, method: "POST" | "PATCH" | "PUT" | "DELETE" = "POST"): Promise<T> {
+  return fetchJson<T>(path, {
+    method,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+}
+
+async function ensureHydrated(force = false): Promise<void> {
+  const stale = Date.now() - lastHydrationAt > HYDRATION_TTL_MS;
+  if (!force && !stale && lastHydrationAt > 0) return;
+  if (hydrationInFlight) return hydrationInFlight;
+
+  hydrationInFlight = (async () => {
+    try {
+      const snapshot = await fetchJson<Record<string, unknown>>(BOOTSTRAP_PATH);
+      replaceArrayInPlace(projects, snapshot.projects);
+      replaceArrayInPlace(intakeNotes, snapshot.intakeNotes);
+      replaceArrayInPlace(utterances, snapshot.utterances);
+      replaceArrayInPlace(transcriptRevisions, snapshot.transcriptRevisions);
+      replaceArrayInPlace(promptGenerations, snapshot.promptGenerations);
+      replaceArrayInPlace(deliveries, snapshot.deliveries);
+      replaceArrayInPlace(deliveryHistory, snapshot.deliveryHistory);
+      replaceArrayInPlace(processingRuns, snapshot.processingRuns);
+      replaceArrayInPlace(llmRuns, snapshot.llmRuns);
+      replaceArrayInPlace(rulesets, snapshot.rulesets);
+      replaceArrayInPlace(rules, snapshot.rules);
+      replaceArrayInPlace(termDictionary, snapshot.termDictionary);
+      replaceArrayInPlace(promptTemplates, snapshot.promptTemplates);
+      replaceArrayInPlace(deliveryTargets, snapshot.deliveryTargets);
+      replaceArrayInPlace(logs, snapshot.logs);
+      if (snapshot.healthSnapshot && typeof snapshot.healthSnapshot === "object") {
+        Object.assign(healthSnapshot, snapshot.healthSnapshot);
+      }
+      lastHydrationAt = Date.now();
+    } catch (error) {
+      if (STRICT_BACKEND) throw error;
+      // Keep deterministic mock data when backend hydration is unavailable.
+    } finally {
+      hydrationInFlight = null;
+    }
+  })();
+
+  return hydrationInFlight;
+}
+
+// Simulated delay for UX smoothness; also triggers backend hydration.
+const delay = async (ms = 180) => {
+  await ensureHydrated();
+  return new Promise<void>((r) => setTimeout(r, ms));
+};
 
 function paginate<T>(rows: T[], { page = 1, pageSize = 25 }: PageParams): PageResult<T> {
   const start = (page - 1) * pageSize;
@@ -87,8 +161,29 @@ export const qk = {
 
 // ──────────────────────────── Health
 export async function getHealth(): Promise<HealthSnapshot> {
-  await delay(80);
-  return healthSnapshot;
+  try {
+    const [apiHealth, providersHealth] = await Promise.all([
+      fetchJson<{ ok: boolean }>("/_healthz"),
+      fetchJson<{ providers?: Array<{ provider_name?: string; detail?: string; available?: boolean }> }>("/providers/health"),
+    ]);
+    return {
+      ...healthSnapshot,
+      api: {
+        ...healthSnapshot.api,
+        status: apiHealth?.ok ? "ok" : "degraded",
+        checked_at: new Date().toISOString(),
+      },
+      providers: (providersHealth?.providers || []).map((p) => ({
+        name: p.provider_name || "unknown",
+        status: p.available ? "ok" : "degraded",
+        latency_ms: 0,
+      })),
+    };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+    await delay(80);
+    return healthSnapshot;
+  }
 }
 
 // ──────────────────────────── Projects
@@ -419,42 +514,112 @@ export async function getProjectThroughput() {
 
 // ──────────────────────────── Mutations (M1–M5 + actions)
 export async function retryDelivery(id: string) {
+  try {
+    const response = await postJson<{ ok?: boolean; message?: string }>(`/console/deliveries/${id}/retry`);
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, message: response?.message || "Retry queued" };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(220);
   return { ok: true, id, message: "Retry queued" };
 }
 export async function rerouteDelivery(id: string, targetId: string) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/deliveries/${id}/reroute`, { targetId });
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, targetId };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(220);
   return { ok: true, id, targetId };
 }
 export async function updateDeliveryStatus(id: string, status: PfDeliveryStatus) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/deliveries/${id}/status`, { status }, "PATCH");
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, status };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(180);
   return { ok: true, id, status };
 }
 export async function updateRule(id: string, patch: Partial<Pick<Rule, "enabled" | "priority">>) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/rules/${id}`, patch, "PATCH");
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, ...patch };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(180);
   return { ok: true, id, ...patch };
 }
 export async function upsertTerm(payload: Partial<TermDictionaryEntry>) {
+  try {
+    const response = await postJson<{ ok?: boolean; payload?: Partial<TermDictionaryEntry> }>(`/console/dictionary/upsert`, payload);
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, payload: response?.payload ?? payload };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(180);
   return { ok: true, payload };
 }
 export async function activateTemplate(id: string, family: string) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/templates/${id}/activate`, { family });
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, family };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(220);
   return { ok: true, id, family };
 }
 export async function forceReview(id: string) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/prompts/${id}/force-review`);
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(160);
   return { ok: true, id };
 }
 export async function clonePrompt(id: string) {
+  try {
+    const response = await postJson<{ ok?: boolean; newId?: string }>(`/console/prompts/${id}/clone`);
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, newId: response?.newId || `${id}-clone` };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(160);
   return { ok: true, id, newId: id + "-clone" };
 }
 export async function changePromptPriority(id: string, priority: string) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/prompts/${id}/priority`, { priority }, "PATCH");
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id, priority };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(140);
   return { ok: true, id, priority };
 }
 export async function archiveNote(id: string) {
+  try {
+    const response = await postJson<{ ok?: boolean }>(`/console/intake/${id}/archive`, {}, "PATCH");
+    await ensureHydrated(true);
+    return { ok: response?.ok ?? true, id };
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+  }
   await delay(140);
   return { ok: true, id };
 }
