@@ -44,6 +44,7 @@ import type {
   PfTargetType,
 } from "./types";
 import { STRICT_BACKEND, createStrictBackendError, logBackendFallback } from "./config";
+import { ApiError, BackendUnavailableError, NotFoundError, ValidationError } from "./errors";
 
 const API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | undefined)?.replace(/\/+$/, "") || "http://localhost:8090";
 const BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || "/console/bootstrap";
@@ -58,17 +59,27 @@ function replaceArrayInPlace<T>(target: T[], next?: unknown) {
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} for ${path}`);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers || {}),
+      },
+    });
+    if (!res.ok) {
+      const detail = (await res.text()).trim() || res.statusText || `HTTP ${res.status}`;
+      if (res.status === 503) throw new BackendUnavailableError(detail);
+      if (res.status === 404) throw new NotFoundError(detail);
+      if (res.status === 400 || res.status === 422) throw new ValidationError(res.status as 400 | 422, detail);
+      throw new ApiError(res.status, detail, res.status >= 500);
+    }
+    return (await res.json()) as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    const detail = error instanceof Error ? error.message : "Network error";
+    throw new ApiError(0, detail || "Network error", true, error);
   }
-  return (await res.json()) as T;
 }
 
 async function postJson<T>(path: string, payload?: unknown, method: "POST" | "PATCH" | "PUT" | "DELETE" = "POST"): Promise<T> {
@@ -86,6 +97,24 @@ function buildQueryPath(path: string, params: Record<string, unknown>): string {
   }
   const qs = query.toString();
   return qs ? `${path}?${qs}` : path;
+}
+
+interface BackendPaginatedResponse<T> {
+  pagination: { total: number; limit: number; offset: number; has_more: boolean };
+  [key: string]: unknown;
+  _items?: T[];
+}
+
+function adaptPageResult<T>(raw: BackendPaginatedResponse<T>, itemsKey: string, pageSize: number): PageResult<T> {
+  const rows = (raw[itemsKey] as T[] | undefined) ?? [];
+  const { total, limit, offset } = raw.pagination;
+  const page = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
+  return { rows, total, page, pageSize };
+}
+
+async function fetchPageResult<T>(path: string, itemsKey: string, pageSize: number): Promise<PageResult<T>> {
+  const raw = await fetchJson<BackendPaginatedResponse<T>>(path);
+  return adaptPageResult(raw, itemsKey, pageSize);
 }
 
 async function ensureHydrated(force = false): Promise<void> {
@@ -212,7 +241,7 @@ export async function listIntakeNotes(f: IntakeFilters = {}): Promise<PageResult
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchJson<PageResult<IntakeNote>>(buildQueryPath("/console/intake", {
+  return fetchPageResult<IntakeNote>(buildQueryPath("/console/intake", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     project_id: f.projectId,
@@ -221,7 +250,7 @@ export async function listIntakeNotes(f: IntakeFilters = {}): Promise<PageResult
     source_device: f.sourceDevice,
     search: f.search,
     with_skip_reason: f.withSkipReason,
-  }));
+  }), "intakeNotes", pageSize);
 }
 
 export async function getIntakeNote(id: string): Promise<IntakeNote | undefined> {
@@ -281,13 +310,13 @@ export async function listPromptGenerations(f: PromptFilters = {}): Promise<Page
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchJson<PageResult<PromptGeneration>>(buildQueryPath("/console/prompts", {
+  return fetchPageResult<PromptGeneration>(buildQueryPath("/console/prompts", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     status: f.status,
     requires_review: f.requiresReview,
     search: f.search,
-  }));
+  }), "promptGenerations", pageSize);
 }
 
 export async function getPromptGeneration(id: string): Promise<PromptGeneration | undefined> {
@@ -310,12 +339,12 @@ export async function listDeliveries(f: DeliveryFilters = {}): Promise<PageResul
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchJson<PageResult<Delivery & { retry_candidate: boolean }>>(buildQueryPath("/console/deliveries", {
+  return fetchPageResult<Delivery & { retry_candidate: boolean }>(buildQueryPath("/console/deliveries", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     status: f.failedOnly ? "failed" : f.status,
     search: f.search,
-  }));
+  }), "deliveries", pageSize);
 }
 
 export async function getDelivery(id: string): Promise<Delivery | undefined> {
@@ -405,13 +434,13 @@ export async function listTerms(f: TermFilters = {}): Promise<PageResult<TermDic
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchJson<PageResult<TermDictionaryEntry>>(buildQueryPath("/console/dictionary", {
+  return fetchPageResult<TermDictionaryEntry>(buildQueryPath("/console/dictionary", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     scope: f.scope,
     project_id: f.projectId,
     search: f.search,
-  }));
+  }), "termDictionary", pageSize);
 }
 
 // ──────────────────────────── Templates (Q15)
@@ -425,7 +454,7 @@ export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchJson<PageResult<PromptTemplate>>(buildQueryPath("/console/templates", {
+  return fetchPageResult<PromptTemplate>(buildQueryPath("/console/templates", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     prompt_type: f.promptType,
@@ -433,7 +462,7 @@ export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult
     project_id: f.projectId,
     active_only: f.activeOnly ? true : undefined,
     search: f.search,
-  }));
+  }), "promptTemplates", pageSize);
 }
 
 // ──────────────────────────── Targets (Q16)
@@ -455,7 +484,7 @@ export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>
   await delay(120);
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 200;
-  return fetchJson<PageResult<LogEntry>>(buildQueryPath("/console/logs", {
+  return fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     source: f.service,
@@ -465,7 +494,7 @@ export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>
     prompt_generation_id: f.promptGenerationId,
     delivery_id: f.deliveryId,
     search: f.search,
-  }));
+  }), "logs", pageSize);
 }
 
 export async function getErrorFingerprints(limit = 10) {
