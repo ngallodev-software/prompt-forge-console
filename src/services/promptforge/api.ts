@@ -105,6 +105,15 @@ interface BackendPaginatedResponse<T> {
   _items?: T[];
 }
 
+interface LineageResponse {
+  intake_note: IntakeNote;
+  utterances: Array<Utterance & { raw_text?: string }>;
+  revisions: TranscriptRevision[];
+  promptGenerations: PromptGeneration[];
+  deliveries: Delivery[];
+  processingRuns: ProcessingRun[];
+}
+
 export function adaptPageResult<T>(raw: BackendPaginatedResponse<T>, itemsKey: string, pageSize: number): PageResult<T> {
   const rows = (raw[itemsKey] as T[] | undefined) ?? [];
   const { total, limit, offset } = raw.pagination;
@@ -254,8 +263,15 @@ export async function listIntakeNotes(f: IntakeFilters = {}): Promise<PageResult
 }
 
 export async function getIntakeNote(id: string): Promise<IntakeNote | undefined> {
-  await delay(60);
-  return intakeNotes.find((n) => n.id === id);
+  try {
+    const raw = await fetchJson<{ note: IntakeNote }>(`/console/intake/${id}`);
+    return raw.note;
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback(`promptforge intake detail ${id}`, error);
+    await delay(60);
+    return intakeNotes.find((n) => n.id === id);
+  }
 }
 
 export async function getIntakeStatusCounts() {
@@ -290,14 +306,34 @@ export async function listRevisionsForUtterance(utteranceId: string): Promise<Tr
 }
 
 export async function getNoteLineage(noteId: string) {
-  await delay(80);
-  const note = intakeNotes.find((n) => n.id === noteId);
-  const utts = utterances.filter((u) => u.intake_note_id === noteId);
-  const revs = utts.flatMap((u) => transcriptRevisions.filter((r) => r.utterance_id === u.id));
-  const pgs = promptGenerations.filter((p) => p.intake_note_id === noteId);
-  const dels = pgs.flatMap((pg) => deliveries.filter((d) => d.prompt_generation_id === pg.id));
-  const runs = processingRuns.filter((r) => r.intake_note_id === noteId);
-  return { note, utterances: utts, revisions: revs, promptGenerations: pgs, deliveries: dels, processingRuns: runs };
+  try {
+    const raw = await fetchJson<LineageResponse>(`/console/lineage/${noteId}`);
+    return {
+      note: raw.intake_note,
+      utterances: raw.utterances.map((u, index) => ({
+        id: u.id,
+        intake_note_id: u.intake_note_id,
+        speaker: u.speaker ?? null,
+        index: u.index ?? index,
+        created_at: u.created_at,
+      })),
+      revisions: raw.revisions,
+      promptGenerations: raw.promptGenerations,
+      deliveries: raw.deliveries,
+      processingRuns: raw.processingRuns,
+    };
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback(`promptforge lineage ${noteId}`, error);
+    await delay(80);
+    const note = intakeNotes.find((n) => n.id === noteId);
+    const utts = utterances.filter((u) => u.intake_note_id === noteId);
+    const revs = utts.flatMap((u) => transcriptRevisions.filter((r) => r.utterance_id === u.id));
+    const pgs = promptGenerations.filter((p) => p.intake_note_id === noteId);
+    const dels = pgs.flatMap((pg) => deliveries.filter((d) => d.prompt_generation_id === pg.id));
+    const runs = processingRuns.filter((r) => r.intake_note_id === noteId);
+    return { note, utterances: utts, revisions: revs, promptGenerations: pgs, deliveries: dels, processingRuns: runs };
+  }
 }
 
 // ──────────────────────────── Prompt generations (Q3, Q10)
@@ -325,8 +361,23 @@ export async function getPromptGeneration(id: string): Promise<PromptGeneration 
 }
 
 export async function getLatestPromptForNote(noteId: string): Promise<PromptGeneration | undefined> {
-  await delay(40);
-  return promptGenerations.find((p) => p.intake_note_id === noteId);
+  try {
+    const page = await fetchPageResult<PromptGeneration>(
+      buildQueryPath("/console/prompts", {
+        intake_note_id: noteId,
+        limit: 1,
+        offset: 0,
+      }),
+      "promptGenerations",
+      1,
+    );
+    return page.rows[0];
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback(`promptforge latest prompt for note ${noteId}`, error);
+    await delay(40);
+    return promptGenerations.find((p) => p.intake_note_id === noteId);
+  }
 }
 
 // ──────────────────────────── Deliveries (Q5, Q6)
@@ -360,7 +411,7 @@ export async function getDeliveryHistory(id: string): Promise<Delivery[]> {
 }
 
 export async function getQueueDepth() {
-  await delay();
+  await ensureHydrated();
   const groups = new Map<string, number>();
   deliveries
     .filter((d) => ["queued", "dispatching"].includes(d.status))
@@ -376,13 +427,20 @@ export async function getQueueDepth() {
 
 // ──────────────────────────── Processing runs (Q4)
 export async function listProcessingRunsForNote(noteId: string): Promise<ProcessingRun[]> {
-  await delay(50);
-  return processingRuns.filter((r) => r.intake_note_id === noteId);
+  const lineage = await getNoteLineage(noteId);
+  return lineage.processingRuns;
 }
 
 export async function listFailedProcessingRuns(): Promise<ProcessingRun[]> {
-  await delay();
-  return processingRuns.filter((r) => r.status === "failed");
+  try {
+    const page = await fetchPageResult<ProcessingRun>("/console/processing/failed?limit=250&offset=0", "processingRuns", 250);
+    return page.rows;
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge failed processing runs", error);
+    await delay();
+    return processingRuns.filter((r) => r.status === "failed");
+  }
 }
 
 // ──────────────────────────── LLM runs (Q11)
@@ -412,16 +470,39 @@ export async function getLlmRunAggregate() {
 
 // ──────────────────────────── Rules (Q13)
 export async function listRulesets(scope?: PfScope, projectId?: string): Promise<Ruleset[]> {
-  await delay();
-  let rows = rulesets.filter((r) => r.active);
-  if (scope) rows = rows.filter((r) => r.scope === scope);
-  if (projectId) rows = rows.filter((r) => r.project_id === projectId);
-  return rows;
+  try {
+    const page = await fetchPageResult<Ruleset>(buildQueryPath("/console/rulesets", {
+      scope,
+      project_id: projectId,
+      limit: 250,
+      offset: 0,
+    }), "rulesets", 250);
+    return page.rows;
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge rulesets", error);
+    await delay();
+    let rows = rulesets.filter((r) => r.active);
+    if (scope) rows = rows.filter((r) => r.scope === scope);
+    if (projectId) rows = rows.filter((r) => r.project_id === projectId);
+    return rows;
+  }
 }
 
 export async function listRules(rulesetId: string): Promise<Rule[]> {
-  await delay();
-  return rules.filter((r) => r.ruleset_id === rulesetId).sort((a, b) => b.priority - a.priority);
+  try {
+    const page = await fetchPageResult<Rule>(buildQueryPath("/console/rules", {
+      ruleset_id: rulesetId,
+      limit: 500,
+      offset: 0,
+    }), "rules", 500);
+    return page.rows.sort((a, b) => b.priority - a.priority);
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback(`promptforge rules ${rulesetId}`, error);
+    await delay();
+    return rules.filter((r) => r.ruleset_id === rulesetId).sort((a, b) => b.priority - a.priority);
+  }
 }
 
 // ──────────────────────────── Term dictionary (Q14)
@@ -467,8 +548,19 @@ export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult
 
 // ──────────────────────────── Targets (Q16)
 export async function listTargets(type?: PfTargetType): Promise<DeliveryTarget[]> {
-  await delay();
-  return type ? deliveryTargets.filter((t) => t.target_type === type) : deliveryTargets;
+  try {
+    const page = await fetchPageResult<DeliveryTarget>(buildQueryPath("/console/targets", {
+      type,
+      limit: 250,
+      offset: 0,
+    }), "deliveryTargets", 250);
+    return page.rows;
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge targets", error);
+    await delay();
+    return type ? deliveryTargets.filter((t) => t.target_type === type) : deliveryTargets;
+  }
 }
 
 // ──────────────────────────── Logs + fingerprints (Q19)
@@ -498,19 +590,33 @@ export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>
 }
 
 export async function getErrorFingerprints(limit = 10) {
-  await delay();
-  const map = new Map<string, { fingerprint: string; error_text: string; count: number; last_seen_at: string }>();
-  processingRuns.forEach((r) => {
-    if (!r.error_text) return;
-    const fp = r.error_text.slice(0, 12);
-    const v = map.get(fp) || { fingerprint: fp, error_text: r.error_text, count: 0, last_seen_at: r.updated_at };
-    v.count += 1;
-    if (r.updated_at > v.last_seen_at) v.last_seen_at = r.updated_at;
-    map.set(fp, v);
-  });
-  return Array.from(map.values())
-    .sort((a, b) => b.count - a.count)
-    .slice(0, limit);
+  try {
+    const raw = await fetchJson<{ errorFingerprints: Array<{ fingerprint: string; sample_message?: string; count: number; last_seen_at: string }> }>(
+      buildQueryPath("/console/metrics/error-fingerprints", { limit, offset: 0 }),
+    );
+    return (raw.errorFingerprints || []).map((entry) => ({
+      fingerprint: entry.fingerprint,
+      error_text: entry.sample_message || entry.fingerprint,
+      count: entry.count,
+      last_seen_at: entry.last_seen_at,
+    }));
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge error fingerprints", error);
+    await delay();
+    const map = new Map<string, { fingerprint: string; error_text: string; count: number; last_seen_at: string }>();
+    processingRuns.forEach((r) => {
+      if (!r.error_text) return;
+      const fp = r.error_text.slice(0, 12);
+      const v = map.get(fp) || { fingerprint: fp, error_text: r.error_text, count: 0, last_seen_at: r.updated_at };
+      v.count += 1;
+      if (r.updated_at > v.last_seen_at) v.last_seen_at = r.updated_at;
+      map.set(fp, v);
+    });
+    return Array.from(map.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+  }
 }
 
 // ──────────────────────────── SLA (Q20) + throughput (Q12)
@@ -660,4 +766,28 @@ export async function archiveNote(id: string) {
   }
   await delay(140);
   return { ok: true, id };
+}
+
+export interface LlmAssistPayload {
+  prompt: string;
+  context_type?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface LlmAssistResult {
+  result: string;
+  provider?: string | null;
+  model?: string | null;
+  available: boolean;
+}
+
+export async function llmAssist(payload: LlmAssistPayload): Promise<LlmAssistResult> {
+  try {
+    const response = await postJson<LlmAssistResult>("/console/llm/assist", payload);
+    return response;
+  } catch (error) {
+    if (STRICT_BACKEND) throw error;
+    logBackendFallback("llmAssist", error);
+    return { result: "LLM not available in development mode.", available: false };
+  }
 }
