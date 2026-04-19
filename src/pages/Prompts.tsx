@@ -17,6 +17,7 @@ import { Link } from "react-router-dom";
 export default function Prompts() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PromptGeneration | null>(null);
+  const setSel = (r: PromptGeneration) => setSelected(r);
   const { data, isLoading } = useQuery({ queryKey: qk.promptList({ page }), queryFn: () => listPromptGenerations({ page }) });
 
   const columns: Column<PromptGeneration>[] = [
