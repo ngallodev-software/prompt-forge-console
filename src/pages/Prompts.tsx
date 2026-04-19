@@ -42,7 +42,7 @@ export default function Prompts() {
           page={page}
           pageSize={25}
           onPageChange={setPage}
-          onRowClick={setSelected}
+          onRowClick={(r) => setSelected(r)}
           isRowActive={(r) => r.id === selected?.id}
           rowKey={(r) => r.id}
         />
