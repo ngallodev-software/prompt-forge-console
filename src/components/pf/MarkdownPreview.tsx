@@ -62,7 +62,6 @@ export function MarkdownPreview({ source, className }: { source: string; classNa
   return (
     <div
       className={cn("rounded-md border bg-card p-4 max-w-none text-foreground", className)}
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: render(source) }}
     />
   );

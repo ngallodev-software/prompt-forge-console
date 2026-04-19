@@ -24,7 +24,13 @@ export default function Dashboard() {
   const { data: throughput } = useQuery({ queryKey: qk.projectThroughput, queryFn: getProjectThroughput });
 
   const totalQueue = queueDepth?.reduce((a, b) => a + b.queued_count, 0) ?? 0;
-  const avgLatency = sla && sla.length ? Math.round(sla.filter(s => s.latency_ms).reduce((a, b) => a + (b.latency_ms || 0), 0) / sla.filter(s => s.latency_ms).length / 1000) : 0;
+  const latencySamples = (sla ?? []).filter((s) => s.latency_ms !== null && s.latency_ms !== undefined);
+  const avgLatency = latencySamples.length
+    ? Math.round(latencySamples.reduce((a, b) => a + (b.latency_ms || 0), 0) / latencySamples.length / 1000)
+    : 0;
+  const totalNotes = throughput?.reduce((a, b) => a + b.notes, 0) ?? 0;
+  const totalPrompts = throughput?.reduce((a, b) => a + b.prompts, 0) ?? 0;
+  const totalDeliveries = throughput?.reduce((a, b) => a + b.deliveries, 0) ?? 0;
 
   return (
     <>
@@ -40,9 +46,9 @@ export default function Dashboard() {
 
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Avg E2E latency" value={`${avgLatency}s`} Icon={Clock} hint="recent terminal deliveries" />
-          <MetricCard label="Notes" value={throughput?.reduce((a,b)=>a+b.notes,0) ?? 0} Icon={Inbox} />
-          <MetricCard label="Prompts" value={throughput?.reduce((a,b)=>a+b.prompts,0) ?? 0} Icon={Activity} />
-          <MetricCard label="Deliveries" value={throughput?.reduce((a,b)=>a+b.deliveries,0) ?? 0} Icon={Send} />
+          <MetricCard label="Notes" value={totalNotes} Icon={Inbox} />
+          <MetricCard label="Prompts" value={totalPrompts} Icon={Activity} />
+          <MetricCard label="Deliveries" value={totalDeliveries} Icon={Send} />
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">

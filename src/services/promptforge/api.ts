@@ -45,10 +45,30 @@ import type {
 } from "./types";
 import { STRICT_BACKEND, createStrictBackendError, logBackendFallback } from "./config";
 import { ApiError, BackendUnavailableError, NotFoundError, ValidationError } from "./errors";
+import { defaultConsoleSettings, useAppStore } from "@/stores/app-store";
 
-const API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | undefined)?.replace(/\/+$/, "") || "http://localhost:8090";
-const BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || "/console/bootstrap";
-const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
+const ENV_API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | undefined)?.replace(/\/+$/, "") || defaultConsoleSettings.apiBaseUrl;
+const ENV_BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || defaultConsoleSettings.bootstrapPath;
+export const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
+
+function getApiBase(): string {
+  return useAppStore.getState().consoleSettings.apiBaseUrl.trim().replace(/\/+$/, "") || ENV_API_BASE;
+}
+
+function getBootstrapPath(): string {
+  return useAppStore.getState().consoleSettings.bootstrapPath.trim() || ENV_BOOTSTRAP_PATH;
+}
+
+export function getConsoleRuntimeSnapshot() {
+  return {
+    apiBaseUrl: getApiBase(),
+    bootstrapPath: getBootstrapPath(),
+    defaultApiBaseUrl: ENV_API_BASE,
+    defaultBootstrapPath: ENV_BOOTSTRAP_PATH,
+    hydrationTtlMs: HYDRATION_TTL_MS,
+    strictBackend: STRICT_BACKEND,
+  };
+}
 
 let lastHydrationAt = 0;
 let hydrationInFlight: Promise<void> | null = null;
@@ -60,7 +80,7 @@ function replaceArrayInPlace<T>(target: T[], next?: unknown) {
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -133,7 +153,7 @@ async function ensureHydrated(force = false): Promise<void> {
 
   hydrationInFlight = (async () => {
     try {
-      const snapshot = await fetchJson<Record<string, unknown>>(BOOTSTRAP_PATH);
+      const snapshot = await fetchJson<Record<string, unknown>>(getBootstrapPath());
       replaceArrayInPlace(projects, snapshot.projects);
       replaceArrayInPlace(intakeNotes, snapshot.intakeNotes);
       replaceArrayInPlace(utterances, snapshot.utterances);

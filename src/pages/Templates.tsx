@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listTemplates, activateTemplate, qk } from "@/services/promptforge";
+import { listTemplates, activateTemplate, llmAssist, qk } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScopeBadge } from "@/components/pf/ScopeBadge";
 import { StatusBadge } from "@/components/pf/StatusBadge";
 import { MarkdownPreview } from "@/components/pf/MarkdownPreview";
@@ -10,6 +11,7 @@ import { QueryInspector } from "@/components/pf/QueryInspector";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { PromptTemplate } from "@/services/promptforge/types";
 import { toast } from "@/hooks/use-toast";
 
@@ -18,11 +20,30 @@ export default function Templates() {
   const templates = data?.rows ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected: PromptTemplate | undefined = templates.find(t => t.id === selectedId) ?? templates[0];
+  const [assistantPrompt, setAssistantPrompt] = useState("Help me write a template for:");
+  const [assistantResult, setAssistantResult] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
 
   const onActivate = async () => {
     if (!selected) return;
     await activateTemplate(selected.id, selected.template_family_key);
     toast({ title: "Template activated", description: `${selected.name} v${selected.version}` });
+  };
+
+  const onAskAssistant = async () => {
+    setAssistantLoading(true);
+    try {
+      const response = await llmAssist({
+        prompt: assistantPrompt,
+        context_type: "template",
+        context: selected ? { template_name: selected.name, template_body: selected.body } : undefined,
+      });
+      setAssistantResult(response.result);
+    } catch (error) {
+      toast({ title: "LLM assistant failed", description: error instanceof Error ? error.message : "Unable to generate a response." });
+    } finally {
+      setAssistantLoading(false);
+    }
   };
 
   return (
@@ -73,6 +94,29 @@ export default function Templates() {
             )}
           </Card>
         </div>
+        <Collapsible defaultOpen>
+          <Card className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">LLM assistant</h3>
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="outline">Collapse</Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent className="space-y-3">
+              <Textarea
+                value={assistantPrompt}
+                onChange={(e) => setAssistantPrompt(e.target.value)}
+                className="font-mono text-xs min-h-[120px]"
+              />
+              <div className="flex justify-end">
+                <Button size="sm" onClick={onAskAssistant} disabled={assistantLoading}>
+                  {assistantLoading ? "Asking..." : "Ask"}
+                </Button>
+              </div>
+              {assistantResult && <Textarea value={assistantResult} readOnly className="font-mono text-xs min-h-[160px]" />}
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </PageBody>
     </>
   );

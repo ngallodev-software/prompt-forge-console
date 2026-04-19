@@ -26,6 +26,7 @@ export type PfDeliveryMode = "draft" | "queue" | "auto_dispatch";
 export type PfDeliveryStatus = "not_started" | "queued" | "dispatching" | "delivered" | "acked" | "failed";
 export type PfProcessingStatus = "running" | "completed" | "failed";
 export type PfPriority = "low" | "normal" | "high" | "urgent";
+export type LlmMode = "deterministic_only" | "deterministic_plus_review" | "llm_inference_optional";
 
 export type Role = "viewer" | "operator" | "admin";
 
@@ -209,6 +210,11 @@ export interface HealthSnapshot {
   db: { status: "ok" | "degraded" | "down"; latency_ms: number };
   queue_depth: number;
   failures_24h: number;
+}
+
+export interface ConsoleSettings {
+  apiBaseUrl: string;
+  bootstrapPath: string;
 }
 
 export interface PageParams {

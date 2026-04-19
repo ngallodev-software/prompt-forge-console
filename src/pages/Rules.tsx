@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { listRulesets, listRules, qk } from "@/services/promptforge";
+import { listRulesets, listRules, llmAssist, qk } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card } from "@/components/ui/card";
 import { ScopeBadge } from "@/components/pf/ScopeBadge";
@@ -10,13 +10,38 @@ import { QueryInspector } from "@/components/pf/QueryInspector";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
 
 export default function Rules() {
   const { data: rulesets, isLoading } = useQuery({ queryKey: qk.rulesets(), queryFn: () => listRulesets() });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const activeId = selectedId ?? rulesets?.[0]?.id ?? null;
+  const selectedRuleset = rulesets?.find(rs => rs.id === activeId) ?? null;
   const { data: rules } = useQuery({ queryKey: qk.rulesByRuleset(activeId ?? ""), queryFn: () => listRules(activeId!), enabled: !!activeId });
   const [sandboxInput, setSandboxInput] = useState("# Voice memo\n\nUm, like, refactor the dispatcher please.");
+  const [assistantQuestion, setAssistantQuestion] = useState("Explain the effect of this ruleset:");
+  const [assistantResult, setAssistantResult] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+
+  const onAskAssistant = async () => {
+    setAssistantLoading(true);
+    try {
+      const response = await llmAssist({
+        prompt: assistantQuestion,
+        context_type: "rule",
+        context: {
+          ruleset_name: selectedRuleset?.name ?? null,
+          rules_count: rules?.length ?? 0,
+        },
+      });
+      setAssistantResult(response.result);
+    } catch (error) {
+      toast({ title: "LLM assistant failed", description: error instanceof Error ? error.message : "Unable to generate a response." });
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
 
   return (
     <>
@@ -53,6 +78,21 @@ export default function Rules() {
           <PermissionGuard require="operator" inline>
             <Button size="sm">Run dry-run</Button>
           </PermissionGuard>
+
+          <div className="space-y-3 border-t pt-3">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Ask LLM about this ruleset</Label>
+            <Textarea
+              value={assistantQuestion}
+              onChange={(e) => setAssistantQuestion(e.target.value)}
+              className="font-mono text-xs min-h-[120px]"
+            />
+            <div className="flex justify-end">
+              <Button size="sm" onClick={onAskAssistant} disabled={assistantLoading}>
+                {assistantLoading ? "Asking..." : "Ask"}
+              </Button>
+            </div>
+            {assistantResult && <Textarea value={assistantResult} readOnly className="font-mono text-xs min-h-[160px]" />}
+          </div>
         </Card>
       </PageBody>
     </>
