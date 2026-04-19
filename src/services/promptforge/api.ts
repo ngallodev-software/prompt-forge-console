@@ -592,21 +592,70 @@ export interface LogFilters extends PageParams {
   promptGenerationId?: string;
   deliveryId?: string;
 }
+
+function applyLogFilters(rows: LogEntry[], f: LogFilters): LogEntry[] {
+  const search = f.search?.trim().toLowerCase();
+  return rows.filter((row) => {
+    if (f.service && row.service !== f.service) return false;
+    if (f.level && row.level !== f.level) return false;
+    if (f.intakeNoteId && row.intake_note_id !== f.intakeNoteId) return false;
+    if (f.utteranceId && row.utterance_id !== f.utteranceId) return false;
+    if (f.promptGenerationId && row.prompt_generation_id !== f.promptGenerationId) return false;
+    if (f.deliveryId && row.delivery_id !== f.deliveryId) return false;
+    if (!search) return true;
+
+    const haystack = [
+      row.message,
+      row.service,
+      row.level,
+      row.intake_note_id,
+      row.utterance_id,
+      row.prompt_generation_id,
+      row.delivery_id,
+      JSON.stringify(row.fields),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(search);
+  });
+}
+
+function paginateRows<T>(rows: T[], page: number, pageSize: number): PageResult<T> {
+  const start = (page - 1) * pageSize;
+  return {
+    rows: rows.slice(start, start + pageSize),
+    total: rows.length,
+    page,
+    pageSize,
+  };
+}
+
 export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>> {
   await delay(120);
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 200;
-  return fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    source: f.service,
-    level: f.level,
-    intake_note_id: f.intakeNoteId,
-    utterance_id: f.utteranceId,
-    prompt_generation_id: f.promptGenerationId,
-    delivery_id: f.deliveryId,
-    search: f.search,
-  }), "logs", pageSize);
+  try {
+    const result = await fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      source: f.service,
+      level: f.level,
+      intake_note_id: f.intakeNoteId,
+      utterance_id: f.utteranceId,
+      prompt_generation_id: f.promptGenerationId,
+      delivery_id: f.deliveryId,
+      search: f.search,
+    }), "logs", pageSize);
+
+    if (result.total > 0 || logs.length === 0 || STRICT_BACKEND) return result;
+    return paginateRows(applyLogFilters(logs, f), page, pageSize);
+  } catch (error) {
+    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    logBackendFallback("promptforge logs", error);
+    await delay();
+    return paginateRows(applyLogFilters(logs, f), page, pageSize);
+  }
 }
 
 export async function getErrorFingerprints(limit = 10) {

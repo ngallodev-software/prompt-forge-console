@@ -27,6 +27,11 @@ export function LogStream({ logs }: { logs: LogEntry[] }) {
 
   return (
     <div ref={ref} className="h-[60vh] rounded-md border bg-surface-sunken">
+      {items.length === 0 && (
+        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+          No logs match the current filters.
+        </div>
+      )}
       {size.w > 0 && (
         <List height={size.h} width={size.w} itemCount={items.length} itemSize={32} overscanCount={12}>
           {({ index, style }) => {
