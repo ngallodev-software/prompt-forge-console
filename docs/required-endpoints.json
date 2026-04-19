@@ -1,0 +1,17 @@
+{
+  "endpoints": [
+    "/console/deliveries",
+    "/console/dictionary",
+    "/console/intake",
+    "/console/logs",
+    "/console/prompts",
+    "/console/templates"
+  ],
+  "errorExports": [
+    "ApiError",
+    "BackendUnavailableError",
+    "NotFoundError",
+    "StrictModeError",
+    "ValidationError"
+  ]
+}
