@@ -130,7 +130,7 @@ export default function Settings() {
     <>
       <PageHeader
         title="Settings"
-        description="Local console preferences are editable here. Backend runtime and secret-bearing settings stay read-only until server support exists."
+        description="Local console preferences are editable here. Backend runtime and secret-bearing settings are server-managed, so this console keeps those sections read-only for now."
       />
       <PageBody>
         <div className="grid gap-4 xl:grid-cols-2">
@@ -370,10 +370,10 @@ export default function Settings() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold">Backend-managed runtime configuration</h3>
-              <Badge variant="outline">Read-only until API exists</Badge>
+              <Badge variant="outline">Server managed</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              These values should not be faked in the browser. The frontend needs a settings API before any of them become editable here.
+              These values already persist through the backend. The console shows them read-only until the editor wiring is added here.
             </p>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
@@ -399,7 +399,7 @@ export default function Settings() {
               <Badge variant="outline">Read-only</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Secret material stays server-side. The console should only read masked metadata after backend support is added.
+              Secret material stays server-side. The console can only read masked metadata from the API.
             </p>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
@@ -450,7 +450,7 @@ export default function Settings() {
         </Card>
 
         <PermissionGuard require="admin">
-          <DangerZoneCard title="Admin actions" description="Server mutations stay disabled until backend endpoints and audit logging exist.">
+          <DangerZoneCard title="Admin actions" description="Server mutations exist in the backend, but the console still keeps admin flows disabled until the UI wiring and confirmation handling are added.">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-status-danger/20 bg-background/70 px-3 py-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -458,24 +458,23 @@ export default function Settings() {
                   Purge archived notes
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  The previous button was presentation-only. It is now blocked until a real admin endpoint and audit trail exist.
+                  The backend already has the supporting endpoints. This button stays disabled until the console wires them in safely.
                 </p>
               </div>
               <Button variant="destructive" size="sm" disabled>
-                Pending backend support
+                Not wired
               </Button>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <DatabaseZap className="h-4 w-4" />
-                  Backend handoff required
+                  Console wiring required
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Implement settings read/write APIs before turning backend-managed sections editable in the console.
+                  Connect these screens to the existing settings endpoints if you want backend-managed sections editable here.
                 </p>
               </div>
-              <code className="rounded bg-muted px-2 py-1 text-xs">docs/phased-impl/settings-backend-support-prompt.md</code>
             </div>
           </DangerZoneCard>
         </PermissionGuard>

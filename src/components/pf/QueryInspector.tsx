@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/stores/app-store";
 import { getQueriesForPage } from "@/services/promptforge";
 import { useLocation } from "react-router-dom";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export function QueryInspector({ className }: { className?: string }) {
   const debug = useAppStore((s) => s.debug);
@@ -14,13 +15,20 @@ export function QueryInspector({ className }: { className?: string }) {
   if (queries.length === 0) return null;
   return (
     <div className={cn("rounded-md border border-status-info/30 bg-status-info-muted/40 text-xs", className)}>
-      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-status-info">
-        <span className="flex items-center gap-2 font-medium">
-          <Database className="h-3.5 w-3.5" />
-          Query inspector — {queries.length} catalog quer{queries.length === 1 ? "y" : "ies"} on this page
-        </span>
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-status-info">
+            <span className="flex items-center gap-2 font-medium">
+              <Database className="h-3.5 w-3.5" />
+              Query inspector — {queries.length} catalog quer{queries.length === 1 ? "y" : "ies"} on this page
+            </span>
+            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs leading-5">
+          Debug-only panel. Expand it to see which catalog queries support this page and which parameters they expect.
+        </TooltipContent>
+      </Tooltip>
       {open && (
         <div className="border-t border-status-info/20 p-3 space-y-2">
           {queries.map((q) => (

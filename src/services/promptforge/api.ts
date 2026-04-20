@@ -271,16 +271,36 @@ export async function listIntakeNotes(f: IntakeFilters = {}): Promise<PageResult
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchPageResult<IntakeNote>(buildQueryPath("/console/intake", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    project_id: f.projectId,
-    status: f.status,
-    watch_eligible: f.watchEligible,
-    source_device: f.sourceDevice,
-    search: f.search,
-    with_skip_reason: f.withSkipReason,
-  }), "intakeNotes", pageSize);
+  try {
+    return await fetchPageResult<IntakeNote>(buildQueryPath("/console/intake", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      project_id: f.projectId,
+      status: f.status,
+      watch_eligible: f.watchEligible,
+      source_device: f.sourceDevice,
+      search: f.search,
+      with_skip_reason: f.withSkipReason,
+    }), "intakeNotes", pageSize);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge intake notes", error);
+    const rows = intakeNotes.filter((n) => {
+      if (f.projectId && n.project_id !== f.projectId) return false;
+      if (f.status && n.status !== f.status) return false;
+      if (f.watchEligible !== undefined && n.watch_eligible !== f.watchEligible) return false;
+      if (f.sourceDevice && n.source_device !== f.sourceDevice) return false;
+      if (f.withSkipReason && !n.skip_reason) return false;
+      const search = f.search?.trim().toLowerCase();
+      if (!search) return true;
+      return [n.id, n.note_relative_path, n.summary, n.project_id, n.source_device, n.skip_reason, JSON.stringify(n.metadata)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize };
+  }
 }
 
 export async function getIntakeNote(id: string): Promise<IntakeNote | undefined> {
@@ -367,15 +387,30 @@ export async function listPromptGenerations(f: PromptFilters = {}): Promise<Page
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  const result = await fetchPageResult<PromptGeneration>(buildQueryPath("/console/prompts", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    status: f.status,
-    requires_review: f.requiresReview,
-    search: f.search,
-  }), "promptGenerations", pageSize);
-  assertBackendRows("prompt generations", result.total, seededCatalogCounts.promptGenerations);
-  return result;
+  try {
+    return await fetchPageResult<PromptGeneration>(buildQueryPath("/console/prompts", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      status: f.status,
+      requires_review: f.requiresReview,
+      search: f.search,
+    }), "promptGenerations", pageSize);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge prompt generations", error);
+    const rows = promptGenerations.filter((pg) => {
+      if (f.status && pg.status !== f.status) return false;
+      if (f.requiresReview !== undefined && Boolean(pg.requires_review) !== f.requiresReview) return false;
+      const search = f.search?.trim().toLowerCase();
+      if (!search) return true;
+      return [pg.id, pg.title, pg.intake_note_id, pg.status, pg.summary, JSON.stringify(pg.metadata)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize };
+  }
 }
 
 export async function getPromptGeneration(id: string): Promise<PromptGeneration | undefined> {
@@ -413,14 +448,30 @@ export async function listDeliveries(f: DeliveryFilters = {}): Promise<PageResul
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  const result = await fetchPageResult<Delivery & { retry_candidate: boolean }>(buildQueryPath("/console/deliveries", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    status: f.failedOnly ? "failed" : f.status,
-    search: f.search,
-  }), "deliveries", pageSize);
-  assertBackendRows("deliveries", result.total, seededCatalogCounts.deliveries);
-  return result;
+  try {
+    return await fetchPageResult<Delivery & { retry_candidate: boolean }>(buildQueryPath("/console/deliveries", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      status: f.failedOnly ? "failed" : f.status,
+      search: f.search,
+    }), "deliveries", pageSize);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge deliveries", error);
+    const rows = deliveries.filter((d) => {
+      if (f.failedOnly && d.status !== "failed") return false;
+      if (f.status && d.status !== f.status) return false;
+      const search = f.search?.trim().toLowerCase();
+      if (!search) return true;
+      return [d.id, d.prompt_generation_id, d.destination, d.status, d.error_text, JSON.stringify(d.metadata)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+    const decorated = rows.map((d) => ({ ...d, retry_candidate: d.status === "failed" }));
+    return { rows: decorated.slice((page - 1) * pageSize, page * pageSize), total: decorated.length, page, pageSize };
+  }
 }
 
 export async function getDelivery(id: string): Promise<Delivery | undefined> {
@@ -540,13 +591,26 @@ export async function listTerms(f: TermFilters = {}): Promise<PageResult<TermDic
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchPageResult<TermDictionaryEntry>(buildQueryPath("/console/dictionary", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    scope: f.scope,
-    project_id: f.projectId,
-    search: f.search,
-  }), "termDictionary", pageSize);
+  try {
+    return await fetchPageResult<TermDictionaryEntry>(buildQueryPath("/console/dictionary", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      scope: f.scope,
+      project_id: f.projectId,
+      search: f.search,
+    }), "termDictionary", pageSize);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge term dictionary", error);
+    const rows = termDictionary.filter((term) => {
+      if (f.scope && term.scope !== f.scope) return false;
+      if (f.projectId && term.project_id !== f.projectId) return false;
+      const search = f.search?.trim().toLowerCase();
+      if (!search) return true;
+      return [term.source_term, term.normalized_term, term.description, term.project_id].filter(Boolean).join(" ").toLowerCase().includes(search);
+    });
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize };
+  }
 }
 
 // ──────────────────────────── Templates (Q15)
@@ -560,15 +624,30 @@ export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchPageResult<PromptTemplate>(buildQueryPath("/console/templates", {
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
-    prompt_type: f.promptType,
-    scope: f.scope,
-    project_id: f.projectId,
-    active_only: f.activeOnly ? true : undefined,
-    search: f.search,
-  }), "promptTemplates", pageSize);
+  try {
+    return await fetchPageResult<PromptTemplate>(buildQueryPath("/console/templates", {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      prompt_type: f.promptType,
+      scope: f.scope,
+      project_id: f.projectId,
+      active_only: f.activeOnly ? true : undefined,
+      search: f.search,
+    }), "promptTemplates", pageSize);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge templates", error);
+    const rows = promptTemplates.filter((template) => {
+      if (f.promptType && template.prompt_type !== f.promptType) return false;
+      if (f.scope && template.scope !== f.scope) return false;
+      if (f.projectId && template.project_id !== f.projectId) return false;
+      if (f.activeOnly && !template.is_active) return false;
+      const search = f.search?.trim().toLowerCase();
+      if (!search) return true;
+      return [template.name, template.prompt_type, template.scope, template.project_id, template.template_family_key, template.body].filter(Boolean).join(" ").toLowerCase().includes(search);
+    });
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize };
+  }
 }
 
 // ──────────────────────────── Targets (Q16)
@@ -760,6 +839,12 @@ export async function updateRule(id: string, patch: Partial<Pick<Rule, "enabled"
   } catch (error) {
     if (!shouldUseMockData()) throw error;
   }
+  const rule = rules.find((row) => row.id === id);
+  if (rule) {
+    if (patch.enabled !== undefined) rule.enabled = patch.enabled;
+    if (patch.priority !== undefined) rule.priority = patch.priority;
+    rule.updated_at = new Date().toISOString();
+  }
   await delay(180);
   return { ok: true, id, ...patch };
 }
@@ -772,7 +857,63 @@ export async function upsertTerm(payload: Partial<TermDictionaryEntry>) {
     if (!shouldUseMockData()) throw error;
   }
   await delay(180);
-  return { ok: true, payload };
+  const normalized = {
+    id: payload.id ?? `term-${Math.random().toString(36).slice(2, 10)}`,
+    scope: payload.scope ?? "global",
+    project_id: payload.project_id ?? null,
+    source_term: payload.source_term ?? "",
+    normalized_term: payload.normalized_term ?? "",
+    description: payload.description,
+    created_at: payload.created_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } satisfies TermDictionaryEntry;
+  const index = termDictionary.findIndex((term) => term.id === normalized.id);
+  if (index >= 0) {
+    termDictionary[index] = { ...termDictionary[index], ...normalized };
+  } else {
+    termDictionary.unshift(normalized);
+  }
+  return { ok: true, payload: normalized };
+}
+
+function buildTemplateFamilyKey(name: string, promptType: string) {
+  const slug = `${name}-${promptType}`
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return slug || `template_${Date.now().toString(36)}`;
+}
+
+export async function upsertTemplateLocal(payload: Partial<PromptTemplate>) {
+  await delay(120);
+  const now = new Date().toISOString();
+  const template: PromptTemplate = {
+    id: payload.id ?? `tmpl-${Math.random().toString(36).slice(2, 10)}`,
+    name: payload.name ?? "Untitled template",
+    prompt_type: payload.prompt_type ?? "agent_task",
+    scope: payload.scope ?? "global",
+    project_id: payload.project_id ?? null,
+    version: payload.version ?? 1,
+    is_active: payload.is_active ?? false,
+    template_family_key: payload.template_family_key ?? buildTemplateFamilyKey(payload.name ?? "Untitled template", payload.prompt_type ?? "agent_task"),
+    body: payload.body ?? "",
+    updated_at: now,
+  };
+  const index = promptTemplates.findIndex((row) => row.id === template.id);
+  if (index >= 0) {
+    promptTemplates[index] = { ...promptTemplates[index], ...template };
+  } else {
+    promptTemplates.unshift(template);
+  }
+  if (template.is_active) {
+    promptTemplates.forEach((row) => {
+      if (row.id !== template.id && row.template_family_key === template.template_family_key && row.scope === template.scope && row.project_id === template.project_id) {
+        row.is_active = false;
+      }
+    });
+  }
+  return { ok: true, template };
 }
 export async function activateTemplate(id: string, family: string) {
   try {
@@ -781,6 +922,15 @@ export async function activateTemplate(id: string, family: string) {
     return { ok: response?.ok ?? true, id, family };
   } catch (error) {
     if (!shouldUseMockData()) throw error;
+  }
+  const target = promptTemplates.find((row) => row.id === id);
+  if (target) {
+    promptTemplates.forEach((row) => {
+      if (row.template_family_key === family && row.scope === target.scope && row.project_id === target.project_id) {
+        row.is_active = row.id === id;
+        row.updated_at = new Date().toISOString();
+      }
+    });
   }
   await delay(220);
   return { ok: true, id, family };

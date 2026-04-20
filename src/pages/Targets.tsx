@@ -28,7 +28,10 @@ export default function Targets() {
 
   return (
     <>
-      <PageHeader title="Delivery targets" description="Chat sessions, CLI sessions, queues, and Obsidian write-back targets." />
+      <PageHeader
+        title="Delivery targets"
+        description="Configured targets for chat sessions, CLI sessions, queues, and Obsidian write-back. This page is inventory only; dispatch execution lives in backend jobs."
+      />
       <PageBody>
         <QueryInspector />
         <DataTable columns={columns} rows={data} isLoading={isLoading} rowKey={(r) => r.id} />
