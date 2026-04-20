@@ -9,7 +9,11 @@ import { ErrorState } from "@/components/pf/ErrorState";
 export function WorkspaceSwitcher() {
   const workspace = useAppStore((s) => s.workspace);
   const setWorkspace = useAppStore((s) => s.setWorkspace);
-  const { data: projects = [] } = useQuery({ queryKey: qk.projects, queryFn: listProjects });
+  const { data: projects = [], error, isError } = useQuery({
+    queryKey: qk.projects,
+    queryFn: listProjects,
+    throwOnError: false,
+  });
 
   const current = workspace.scope === "global" ? null : projects.find((p) => p.id === workspace.projectId);
   const label = current ? current.name : "Global workspace";
@@ -37,7 +41,13 @@ export function WorkspaceSwitcher() {
         </button>
         <div className="my-1 h-px bg-border" />
         <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Projects</div>
-        {hasProjects ? (
+        {isError ? (
+          <ErrorState
+            className="mt-2"
+            title="Projects load failed"
+            message={error instanceof Error ? error.message : "The backend rejected the projects request."}
+          />
+        ) : hasProjects ? (
           projects.map((p) => (
             <button
               key={p.id}

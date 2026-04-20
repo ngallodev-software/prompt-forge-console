@@ -10,8 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun, Bug } from "lucide-react";
 import { useAppStore } from "@/stores/app-store";
 import { RouteErrorBoundary } from "@/components/pf/RouteErrorBoundary";
+import { useLocation } from "react-router-dom";
 
 export function AppLayout() {
+  const location = useLocation();
   const theme = useAppStore((s) => s.theme);
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const debug = useAppStore((s) => s.debug);
@@ -50,7 +52,7 @@ export function AppLayout() {
             <GlobalHealthStrip />
           </header>
           <main className="flex-1 min-w-0">
-            <RouteErrorBoundary>
+            <RouteErrorBoundary key={location.key}>
               <Outlet />
             </RouteErrorBoundary>
           </main>

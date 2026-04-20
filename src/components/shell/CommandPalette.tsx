@@ -31,7 +31,11 @@ const routes = [
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { data } = useQuery({ queryKey: qk.intakeList({ pageSize: 8 }), queryFn: () => listIntakeNotes({ pageSize: 8 }) });
+  const { data } = useQuery({
+    queryKey: qk.intakeList({ pageSize: 8 }),
+    queryFn: () => listIntakeNotes({ pageSize: 8 }),
+    throwOnError: false,
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
