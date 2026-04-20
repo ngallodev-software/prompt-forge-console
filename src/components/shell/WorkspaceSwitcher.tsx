@@ -4,6 +4,7 @@ import { listProjects, qk } from "@/services/promptforge";
 import { Globe, FolderGit2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ErrorState } from "@/components/pf/ErrorState";
 
 export function WorkspaceSwitcher() {
   const workspace = useAppStore((s) => s.workspace);
@@ -13,6 +14,7 @@ export function WorkspaceSwitcher() {
   const current = workspace.scope === "global" ? null : projects.find((p) => p.id === workspace.projectId);
   const label = current ? current.name : "Global workspace";
   const Icon = current ? FolderGit2 : Globe;
+  const hasProjects = projects.length > 0;
 
   return (
     <Popover>
@@ -35,19 +37,27 @@ export function WorkspaceSwitcher() {
         </button>
         <div className="my-1 h-px bg-border" />
         <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">Projects</div>
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setWorkspace({ scope: "project", projectId: p.id })}
-            className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <FolderGit2 className="h-3.5 w-3.5" />
-              <span className="truncate">{p.name}</span>
-            </span>
-            {workspace.projectId === p.id && <Check className="h-3.5 w-3.5" />}
-          </button>
-        ))}
+        {hasProjects ? (
+          projects.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setWorkspace({ scope: "project", projectId: p.id })}
+              className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <FolderGit2 className="h-3.5 w-3.5" />
+                <span className="truncate">{p.name}</span>
+              </span>
+              {workspace.projectId === p.id && <Check className="h-3.5 w-3.5" />}
+            </button>
+          ))
+        ) : (
+          <ErrorState
+            className="mt-2"
+            title="No projects returned"
+            message="The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
+          />
+        )}
       </PopoverContent>
     </Popover>
   );

@@ -1,3 +1,5 @@
+import { useAppStore } from "@/stores/app-store";
+
 export type RuntimeEnvironment = "development" | "staging" | "production";
 
 function readProcessEnv(name: string): string | undefined {
@@ -56,7 +58,12 @@ export function createStrictBackendError(cause?: unknown): Error {
   return error;
 }
 
+export function shouldUseMockData(): boolean {
+  if (STRICT_BACKEND) return false;
+  return useAppStore.getState().useMockData;
+}
+
 export function logBackendFallback(context: string, error: unknown): void {
-  if (STRICT_BACKEND) return;
+  if (!shouldUseMockData()) return;
   console.warn("[promptforge] " + context + " failed; using mock data in development", error);
 }

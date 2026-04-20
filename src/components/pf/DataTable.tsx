@@ -87,7 +87,7 @@ export function DataTable<T>({
             {!isLoading && rows && rows.length === 0 && (
               <tr>
                 <td colSpan={columns.length} className="p-4">
-                  <EmptyState title={emptyTitle ?? "No results"} description={emptyDescription} />
+                  <EmptyState title={emptyTitle ?? "No records returned"} description={emptyDescription ?? "Try adjusting filters or check backend data."} />
                 </td>
               </tr>
             )}

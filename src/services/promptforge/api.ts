@@ -43,7 +43,7 @@ import type {
   PfScope,
   PfTargetType,
 } from "./types";
-import { STRICT_BACKEND, createStrictBackendError, logBackendFallback } from "./config";
+import { STRICT_BACKEND, logBackendFallback, shouldUseMockData } from "./config";
 import { ApiError, BackendUnavailableError, NotFoundError, ValidationError } from "./errors";
 import { defaultConsoleSettings, useAppStore } from "@/stores/app-store";
 
@@ -67,6 +67,7 @@ export function getConsoleRuntimeSnapshot() {
     defaultBootstrapPath: ENV_BOOTSTRAP_PATH,
     hydrationTtlMs: HYDRATION_TTL_MS,
     strictBackend: STRICT_BACKEND,
+    mockDataEnabled: shouldUseMockData(),
   };
 }
 
@@ -174,7 +175,7 @@ async function ensureHydrated(force = false): Promise<void> {
       }
       lastHydrationAt = Date.now();
     } catch (error) {
-      if (STRICT_BACKEND) throw createStrictBackendError(error);
+      if (!shouldUseMockData()) throw error;
       logBackendFallback("promptforge bootstrap hydration", error);
       lastHydrationAt = Date.now();
     } finally {
@@ -244,7 +245,7 @@ export async function getHealth(): Promise<HealthSnapshot> {
       })),
     };
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge health check", error);
     await delay(80);
     return healthSnapshot;
@@ -287,7 +288,7 @@ export async function getIntakeNote(id: string): Promise<IntakeNote | undefined>
     const raw = await fetchJson<{ note: IntakeNote }>(`/console/intake/${id}`);
     return raw.note;
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback(`promptforge intake detail ${id}`, error);
     await delay(60);
     return intakeNotes.find((n) => n.id === id);
@@ -343,7 +344,7 @@ export async function getNoteLineage(noteId: string) {
       processingRuns: raw.processingRuns,
     };
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback(`promptforge lineage ${noteId}`, error);
     await delay(80);
     const note = intakeNotes.find((n) => n.id === noteId);
@@ -366,13 +367,15 @@ export async function listPromptGenerations(f: PromptFilters = {}): Promise<Page
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchPageResult<PromptGeneration>(buildQueryPath("/console/prompts", {
+  const result = await fetchPageResult<PromptGeneration>(buildQueryPath("/console/prompts", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     status: f.status,
     requires_review: f.requiresReview,
     search: f.search,
   }), "promptGenerations", pageSize);
+  assertBackendRows("prompt generations", result.total, seededCatalogCounts.promptGenerations);
+  return result;
 }
 
 export async function getPromptGeneration(id: string): Promise<PromptGeneration | undefined> {
@@ -393,7 +396,7 @@ export async function getLatestPromptForNote(noteId: string): Promise<PromptGene
     );
     return page.rows[0];
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback(`promptforge latest prompt for note ${noteId}`, error);
     await delay(40);
     return promptGenerations.find((p) => p.intake_note_id === noteId);
@@ -410,12 +413,14 @@ export async function listDeliveries(f: DeliveryFilters = {}): Promise<PageResul
   await delay();
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 25;
-  return fetchPageResult<Delivery & { retry_candidate: boolean }>(buildQueryPath("/console/deliveries", {
+  const result = await fetchPageResult<Delivery & { retry_candidate: boolean }>(buildQueryPath("/console/deliveries", {
     limit: pageSize,
     offset: (page - 1) * pageSize,
     status: f.failedOnly ? "failed" : f.status,
     search: f.search,
   }), "deliveries", pageSize);
+  assertBackendRows("deliveries", result.total, seededCatalogCounts.deliveries);
+  return result;
 }
 
 export async function getDelivery(id: string): Promise<Delivery | undefined> {
@@ -456,7 +461,7 @@ export async function listFailedProcessingRuns(): Promise<ProcessingRun[]> {
     const page = await fetchPageResult<ProcessingRun>("/console/processing/failed?limit=250&offset=0", "processingRuns", 250);
     return page.rows;
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge failed processing runs", error);
     await delay();
     return processingRuns.filter((r) => r.status === "failed");
@@ -499,7 +504,7 @@ export async function listRulesets(scope?: PfScope, projectId?: string): Promise
     }), "rulesets", 250);
     return page.rows;
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge rulesets", error);
     await delay();
     let rows = rulesets.filter((r) => r.active);
@@ -518,7 +523,7 @@ export async function listRules(rulesetId: string): Promise<Rule[]> {
     }), "rules", 500);
     return page.rows.sort((a, b) => b.priority - a.priority);
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback(`promptforge rules ${rulesetId}`, error);
     await delay();
     return rules.filter((r) => r.ruleset_id === rulesetId).sort((a, b) => b.priority - a.priority);
@@ -576,7 +581,7 @@ export async function listTargets(type?: PfTargetType): Promise<DeliveryTarget[]
     }), "deliveryTargets", 250);
     return page.rows;
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge targets", error);
     await delay();
     return type ? deliveryTargets.filter((t) => t.target_type === type) : deliveryTargets;
@@ -593,7 +598,7 @@ export interface LogFilters extends PageParams {
   deliveryId?: string;
 }
 
-function applyLogFilters(rows: LogEntry[], f: LogFilters): LogEntry[] {
+function filterLogs(rows: LogEntry[], f: LogFilters): LogEntry[] {
   const search = f.search?.trim().toLowerCase();
   return rows.filter((row) => {
     if (f.service && row.service !== f.service) return false;
@@ -621,22 +626,12 @@ function applyLogFilters(rows: LogEntry[], f: LogFilters): LogEntry[] {
   });
 }
 
-function paginateRows<T>(rows: T[], page: number, pageSize: number): PageResult<T> {
-  const start = (page - 1) * pageSize;
-  return {
-    rows: rows.slice(start, start + pageSize),
-    total: rows.length,
-    page,
-    pageSize,
-  };
-}
-
 export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>> {
   await delay(120);
   const page = f.page ?? 1;
   const pageSize = f.pageSize ?? 200;
   try {
-    const result = await fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
+    return await fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
       limit: pageSize,
       offset: (page - 1) * pageSize,
       source: f.service,
@@ -647,14 +642,12 @@ export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>
       delivery_id: f.deliveryId,
       search: f.search,
     }), "logs", pageSize);
-
-    if (result.total > 0 || logs.length === 0 || STRICT_BACKEND) return result;
-    return paginateRows(applyLogFilters(logs, f), page, pageSize);
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge logs", error);
     await delay();
-    return paginateRows(applyLogFilters(logs, f), page, pageSize);
+    const rows = filterLogs(logs, f);
+    return { rows: rows.slice((page - 1) * pageSize, page * pageSize), total: rows.length, page, pageSize };
   }
 }
 
@@ -670,7 +663,7 @@ export async function getErrorFingerprints(limit = 10) {
       last_seen_at: entry.last_seen_at,
     }));
   } catch (error) {
-    if (STRICT_BACKEND) throw createStrictBackendError(error);
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("promptforge error fingerprints", error);
     await delay();
     const map = new Map<string, { fingerprint: string; error_text: string; count: number; last_seen_at: string }>();
@@ -732,7 +725,7 @@ export async function retryDelivery(id: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, message: response?.message || "Retry queued" };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(220);
   return { ok: true, id, message: "Retry queued" };
@@ -743,7 +736,7 @@ export async function rerouteDelivery(id: string, targetId: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, targetId };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(220);
   return { ok: true, id, targetId };
@@ -754,7 +747,7 @@ export async function updateDeliveryStatus(id: string, status: PfDeliveryStatus)
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, status };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(180);
   return { ok: true, id, status };
@@ -765,7 +758,7 @@ export async function updateRule(id: string, patch: Partial<Pick<Rule, "enabled"
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, ...patch };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(180);
   return { ok: true, id, ...patch };
@@ -776,7 +769,7 @@ export async function upsertTerm(payload: Partial<TermDictionaryEntry>) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, payload: response?.payload ?? payload };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(180);
   return { ok: true, payload };
@@ -787,7 +780,7 @@ export async function activateTemplate(id: string, family: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, family };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(220);
   return { ok: true, id, family };
@@ -798,7 +791,7 @@ export async function forceReview(id: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(160);
   return { ok: true, id };
@@ -809,7 +802,7 @@ export async function clonePrompt(id: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, newId: response?.newId || `${id}-clone` };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(160);
   return { ok: true, id, newId: id + "-clone" };
@@ -820,7 +813,7 @@ export async function changePromptPriority(id: string, priority: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id, priority };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(140);
   return { ok: true, id, priority };
@@ -831,7 +824,7 @@ export async function archiveNote(id: string) {
     await ensureHydrated(true);
     return { ok: response?.ok ?? true, id };
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
   }
   await delay(140);
   return { ok: true, id };
@@ -855,7 +848,7 @@ export async function llmAssist(payload: LlmAssistPayload): Promise<LlmAssistRes
     const response = await postJson<LlmAssistResult>("/console/llm/assist", payload);
     return response;
   } catch (error) {
-    if (STRICT_BACKEND) throw error;
+    if (!shouldUseMockData()) throw error;
     logBackendFallback("llmAssist", error);
     return { result: "LLM not available in development mode.", available: false };
   }

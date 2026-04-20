@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ScopeBadge } from "@/components/pf/ScopeBadge";
 import { StatusBadge } from "@/components/pf/StatusBadge";
 import { MarkdownPreview } from "@/components/pf/MarkdownPreview";
+import { EmptyState } from "@/components/pf/EmptyState";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
@@ -53,24 +54,28 @@ export default function Templates() {
         <QueryInspector />
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="p-2">
-            <ul className="space-y-1">
-              {templates.map(t => (
-                <li key={t.id}>
-                  <button onClick={() => setSelectedId(t.id)} className={`w-full rounded px-2 py-2 text-left text-sm hover:bg-accent ${selected?.id === t.id ? "bg-accent" : ""}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium truncate">{t.name}</span>
-                      {t.is_active && <StatusBadge value="active" tone="success" />}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                      <span className="font-mono">v{t.version}</span>·<ScopeBadge value={t.scope} />·<span>{t.prompt_type}</span>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {templates.length === 0 ? (
+              <EmptyState className="my-2" title="No records returned" description="The backend returned no prompt templates." />
+            ) : (
+              <ul className="space-y-1">
+                {templates.map(t => (
+                  <li key={t.id}>
+                    <button onClick={() => setSelectedId(t.id)} className={`w-full rounded px-2 py-2 text-left text-sm hover:bg-accent ${selected?.id === t.id ? "bg-accent" : ""}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium truncate">{t.name}</span>
+                        {t.is_active && <StatusBadge value="active" tone="success" />}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
+                        <span className="font-mono">v{t.version}</span>·<ScopeBadge value={t.scope} />·<span>{t.prompt_type}</span>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           <Card className="p-4 lg:col-span-2 space-y-3">
-            {selected && (
+            {selected ? (
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -91,6 +96,8 @@ export default function Templates() {
                 </div>
                 <MarkdownPreview source={selected.body} />
               </>
+            ) : (
+              <EmptyState title="No records returned" description="The backend returned no prompt templates." />
             )}
           </Card>
         </div>

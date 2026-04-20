@@ -22,7 +22,7 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false } },
+  defaultOptions: { queries: { staleTime: 10_000, refetchOnWindowFocus: false, retry: false, throwOnError: true } },
 });
 
 const App = () => (

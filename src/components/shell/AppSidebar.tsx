@@ -29,6 +29,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { useAppStore } from "@/stores/app-store";
 
 const navGroups = [
   {
@@ -65,6 +66,7 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const collapsed = state === "collapsed";
   const { pathname } = useLocation();
+  const useMockData = useAppStore((s) => s.useMockData);
 
   const isActive = (url: string) =>
     url === "/pipeline" ? pathname.startsWith("/pipeline") : pathname === url || pathname.startsWith(url + "/");
@@ -130,7 +132,7 @@ export function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed && (
           <div className="px-2 py-1.5 text-[10px] text-sidebar-foreground/60">
-            v0.1.0 · mock data
+            v0.1.0 · {useMockData ? "mock data" : "live backend"}
           </div>
         )}
       </SidebarFooter>

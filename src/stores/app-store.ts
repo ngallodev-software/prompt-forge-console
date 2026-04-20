@@ -23,6 +23,7 @@ interface AppState {
   role: Role;
   workspace: Workspace;
   environment: "dev" | "staging" | "prod";
+  useMockData: boolean;
   consoleSettings: ConsoleSettings;
   debug: boolean; // shows QueryInspector overlays etc.
   pollingMs: number;
@@ -31,6 +32,7 @@ interface AppState {
   setRole: (r: Role) => void;
   setWorkspace: (w: Workspace) => void;
   setEnvironment: (e: AppState["environment"]) => void;
+  setUseMockData: (enabled: boolean) => void;
   updateConsoleSettings: (patch: Partial<ConsoleSettings>) => void;
   resetConsoleSettings: () => void;
   resetOperatorPreferences: () => void;
@@ -45,6 +47,7 @@ export const useAppStore = create<AppState>()(
       role: "operator",
       workspace: defaultWorkspace,
       environment: "dev",
+      useMockData: true,
       consoleSettings: defaultConsoleSettings,
       debug: false,
       pollingMs: defaultPollingMs,
@@ -53,6 +56,7 @@ export const useAppStore = create<AppState>()(
       setRole: (r) => set({ role: r }),
       setWorkspace: (w) => set({ workspace: w }),
       setEnvironment: (e) => set({ environment: e }),
+      setUseMockData: (enabled) => set({ useMockData: enabled }),
       updateConsoleSettings: (patch) => set({ consoleSettings: { ...get().consoleSettings, ...patch } }),
       resetConsoleSettings: () => set({ consoleSettings: defaultConsoleSettings }),
       resetOperatorPreferences: () => set({ theme: "light", role: "operator", workspace: defaultWorkspace, environment: "dev", debug: false, pollingMs: defaultPollingMs }),
@@ -61,13 +65,14 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: "promptforge.app",
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
         const state = persistedState as Partial<AppState> & { consoleSettings?: Partial<ConsoleSettings> };
         return {
           ...state,
           workspace: state.workspace ?? defaultWorkspace,
+          useMockData: state.useMockData ?? true,
           consoleSettings: {
             apiBaseUrl: state.consoleSettings?.apiBaseUrl ?? defaultConsoleSettings.apiBaseUrl,
             bootstrapPath: state.consoleSettings?.bootstrapPath ?? defaultConsoleSettings.bootstrapPath,

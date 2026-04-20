@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ScopeBadge } from "@/components/pf/ScopeBadge";
 import { RulePrecedenceVisualizer } from "@/components/pf/RulePrecedenceVisualizer";
 import { LoadingState } from "@/components/pf/LoadingState";
+import { EmptyState } from "@/components/pf/EmptyState";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -52,20 +53,30 @@ export default function Rules() {
           <Card className="p-2">
             <div className="px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">Rulesets</div>
             {isLoading && <LoadingState rows={4} />}
-            <ul className="space-y-1">
-              {rulesets?.map(rs => (
-                <li key={rs.id}>
-                  <button onClick={() => setSelectedId(rs.id)} className={`w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${activeId === rs.id ? "bg-accent" : ""}`}>
-                    <div className="flex items-center justify-between gap-2"><span className="font-medium truncate">{rs.name}</span><ScopeBadge value={rs.scope} /></div>
-                    {rs.description && <div className="text-xs text-muted-foreground truncate">{rs.description}</div>}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {!isLoading && (rulesets?.length ?? 0) === 0 ? (
+              <EmptyState className="my-2" title="No records returned" description="The backend returned no rulesets." />
+            ) : (
+              <ul className="space-y-1">
+                {rulesets?.map(rs => (
+                  <li key={rs.id}>
+                    <button onClick={() => setSelectedId(rs.id)} className={`w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${activeId === rs.id ? "bg-accent" : ""}`}>
+                      <div className="flex items-center justify-between gap-2"><span className="font-medium truncate">{rs.name}</span><ScopeBadge value={rs.scope} /></div>
+                      {rs.description && <div className="text-xs text-muted-foreground truncate">{rs.description}</div>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
           <Card className="p-4 lg:col-span-2 space-y-3">
             <h3 className="text-sm font-semibold">Rule precedence</h3>
-            {rules && <RulePrecedenceVisualizer rules={rules} />}
+            {!activeId ? (
+              <EmptyState title="No records returned" description="The backend returned no rulesets to inspect." />
+            ) : rules && rules.length > 0 ? (
+              <RulePrecedenceVisualizer rules={rules} />
+            ) : (
+              <EmptyState title="No records returned" description="The selected ruleset has no rules." />
+            )}
           </Card>
         </div>
 

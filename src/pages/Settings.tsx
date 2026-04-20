@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DangerZoneCard } from "@/components/pf/DangerZoneCard";
+import { ErrorState } from "@/components/pf/ErrorState";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { QUERY_CATALOG, getConsoleRuntimeSnapshot, listProjects, qk } from "@/services/promptforge";
 import { RUNTIME_ENVIRONMENT } from "@/services/promptforge/config";
@@ -115,12 +116,15 @@ export default function Settings() {
     setPollingMs,
     environment,
     setEnvironment,
+    useMockData,
+    setUseMockData,
     consoleSettings,
     updateConsoleSettings,
     resetConsoleSettings,
     resetOperatorPreferences,
   } = useAppStore();
   const { data: projects = [] } = useQuery({ queryKey: qk.projects, queryFn: listProjects });
+  const hasProjects = projects.length > 0;
 
   return (
     <>
@@ -167,6 +171,16 @@ export default function Settings() {
                 />
                 <p className="text-xs text-muted-foreground">Resolved against the API base. Env default: <span className="font-mono">{runtime.defaultBootstrapPath}</span></p>
               </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 sm:col-span-2">
+                <Label htmlFor="useMockData" className="space-y-0.5">
+                  <div>Use mock data</div>
+                  <div className="text-xs text-muted-foreground">
+                    When off, backend errors surface directly and the console does not substitute mock fallback data.
+                  </div>
+                </Label>
+                <Switch id="useMockData" checked={useMockData} onCheckedChange={setUseMockData} />
+              </div>
             </div>
 
             <div className="grid gap-2 rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
@@ -181,6 +195,10 @@ export default function Settings() {
               <div className="flex items-center justify-between gap-3">
                 <span>Hydration cache TTL</span>
                 <span className="font-mono">{runtime.hydrationTtlMs}ms</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Mock data</span>
+                <span className="font-mono">{runtime.mockDataEnabled ? "enabled" : "disabled"}</span>
               </div>
             </div>
 
@@ -249,15 +267,22 @@ export default function Settings() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select workspace" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">Global workspace</SelectItem>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                <SelectContent>
+                  <SelectItem value="global">Global workspace</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
                 </Select>
+                {!hasProjects && (
+                  <ErrorState
+                    className="mt-3"
+                    title="No projects returned"
+                    message="The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
