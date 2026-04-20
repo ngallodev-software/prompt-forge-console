@@ -175,7 +175,7 @@ export default function Templates() {
         <Alert>
           <AlertTitle>Write contract gap</AlertTitle>
           <AlertDescription>
-            Create/edit now works as a local draft flow. The missing backend contract is `POST /console/templates` and `PATCH /console/templates/{id}`.
+            Create/edit now works as a local draft flow. The missing backend contract is `POST /console/templates` and `PATCH /console/templates/:id`.
           </AlertDescription>
         </Alert>
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-surface-sunken/40 px-3 py-2 text-xs text-muted-foreground">
