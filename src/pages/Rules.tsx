@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Plus, RotateCcw, Save } from "lucide-react";
-import { listRulesets, listRules, llmAssist, qk, updateRule } from "@/services/promptforge";
+import { Plus, RotateCcw, Save } from "lucide-react";
+import { createRule, listRulesets, listRules, llmAssist, qk, runRulesetDryRun, updateRule } from "@/services/promptforge";
 import { RULE_MUTATION_KEYS } from "@/services/promptforge/mutation-invalidation";
 import type { Rule } from "@/services/promptforge/types";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
@@ -15,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/pf/EmptyState";
 import { LoadingState } from "@/components/pf/LoadingState";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { RulePrecedenceVisualizer } from "@/components/pf/RulePrecedenceVisualizer";
@@ -81,11 +82,12 @@ export default function Rules() {
   const [busyRuleId, setBusyRuleId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [sandboxInput, setSandboxInput] = useState("# Voice memo\n\nUm, like, refactor the dispatcher please.");
+  const [dryRunResult, setDryRunResult] = useState("");
+  const [dryRunSummary, setDryRunSummary] = useState<string | null>(null);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
   const [assistantQuestion, setAssistantQuestion] = useState("Explain the effect of this ruleset:");
   const [assistantResult, setAssistantResult] = useState("");
   const [assistantLoading, setAssistantLoading] = useState(false);
-  const missingCreateContract =
-    "Missing backend contract: no POST /console/rules endpoint and no PATCH support for name, rule_type, pattern, replacement, or description.";
 
   useEffect(() => {
     setSelectedRuleId(null);
@@ -126,6 +128,54 @@ export default function Rules() {
       toast({ title: "Rule update failed", description: error instanceof Error ? error.message : "Unable to save rule." });
     } finally {
       setBusyRuleId(null);
+    }
+  };
+
+  const onCreateRule = async () => {
+    if (!activeId) return;
+    const priority = Number.parseInt(draft.priority, 10);
+    if (Number.isNaN(priority)) {
+      toast({ title: "Invalid priority", description: "Priority must be a number." });
+      return;
+    }
+
+    setBusyRuleId("create");
+    try {
+      const created = await createRule({
+        rulesetId: activeId,
+        ruleType: draft.rule_type,
+        priority,
+        enabled: draft.enabled,
+        matchConditionsJson: {
+          ...(draft.name.trim() ? { name: draft.name.trim() } : {}),
+          ...(draft.pattern.trim() ? { pattern: draft.pattern.trim() } : {}),
+        },
+        actionJson: draft.replacement.trim() ? { replacement: draft.replacement.trim() } : {},
+        notes: draft.description.trim() || draft.name.trim() || undefined,
+      });
+      await invalidateRuleQueries();
+      setEditorMode("edit");
+      setSelectedRuleId(created.id);
+      toast({ title: "Rule created", description: created.name });
+    } catch (error) {
+      toast({ title: "Rule create failed", description: error instanceof Error ? error.message : "Unable to create rule." });
+    } finally {
+      setBusyRuleId(null);
+    }
+  };
+
+  const onRunDryRun = async () => {
+    if (!activeId) return;
+    setDryRunLoading(true);
+    try {
+      const result = await runRulesetDryRun(activeId, sandboxInput, {});
+      setDryRunResult(result.transformedOutput);
+      setDryRunSummary(`matched ${result.summary.matchedRules} of ${result.summary.totalRules} rules · failed ${result.summary.failedRules}`);
+      toast({ title: "Dry-run complete", description: result.summary.metadata?.ruleset_id ? `Ruleset ${result.summary.metadata.ruleset_id}` : "Ruleset evaluated." });
+    } catch (error) {
+      toast({ title: "Dry-run failed", description: error instanceof Error ? error.message : "Unable to run dry-run." });
+    } finally {
+      setDryRunLoading(false);
     }
   };
 
@@ -174,12 +224,15 @@ export default function Rules() {
 
   return (
     <>
-      <PageHeader title="Rules & rulesets" description="Manage cleanup, expansion, routing, formatting, safety, and terminology rules." />
+      <PageHeader title="Rules & rulesets" description="Manage cleanup, expansion, routing, formatting, safety, and terminology rules." help={{ label: "Rules help", content: "Use this page to inspect ruleset precedence, edit writable rule fields, and understand which controls are read-only today." }} />
       <PageBody>
         <QueryInspector />
         <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
           <Card className="p-2">
-            <div className="px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">Rulesets</div>
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+              <span>Rulesets</span>
+              <HelpTip label="Rulesets help" content="Ruleset list for the current workspace. Select one to inspect its precedence and individual rules." />
+            </div>
             {isLoading && <LoadingState rows={4} />}
             {!isLoading && (rulesets?.length ?? 0) === 0 ? (
               <EmptyState className="my-2" title="No records returned" description="The backend returned no rulesets." />
@@ -207,7 +260,10 @@ export default function Rules() {
             <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold">Rule precedence</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold">Rule precedence</h3>
+                    <HelpTip label="Rule precedence help" content="Drag rules to change ordering. Higher priority rules are evaluated first." />
+                  </div>
                   <p className="text-xs text-muted-foreground">Drag the grip to reorder and persist numeric precedence.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -250,9 +306,7 @@ export default function Rules() {
                 <div>
                   <h3 className="text-sm font-semibold">{editorMode === "create" ? "Create rule" : "Rule details"}</h3>
                   <p className="text-xs text-muted-foreground">
-                    {editorMode === "create"
-                      ? "Draft mode is present, but the backend contract to create rules is missing."
-                      : "Only enabled and priority are writable today."}
+                    {editorMode === "create" ? "Create a new rule in the selected ruleset." : "Only enabled and priority are writable today."}
                   </p>
                 </div>
                 {editorMode === "edit" && selectedRule ? (
@@ -272,21 +326,16 @@ export default function Rules() {
 
               {editorMode === "create" ? (
                 <div className="space-y-3">
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-                    <div className="flex items-center gap-2 font-medium">
-                      <AlertTriangle className="h-4 w-4" />
-                      Create path unavailable
-                    </div>
-                    <p className="mt-1">{missingCreateContract}</p>
-                  </div>
                   <div className="grid gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
+                      <HelpTip label="Rule name help" content="Human-readable name for the rule. Useful when scanning the precedence list." />
                       <Input value={draft.name} onChange={(e) => setDraft((cur) => ({ ...cur, name: e.target.value }))} placeholder="New rule name" />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-wider text-muted-foreground">Rule type</Label>
+                        <HelpTip label="Rule type help" content="High-level category describing what this rule changes or protects." />
                         <Select value={draft.rule_type} onValueChange={(value) => setDraft((cur) => ({ ...cur, rule_type: value as Rule["rule_type"] }))}>
                           <SelectTrigger>
                             <SelectValue />
@@ -302,33 +351,37 @@ export default function Rules() {
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-xs uppercase tracking-wider text-muted-foreground">Priority</Label>
+                        <HelpTip label="Rule priority help" content="Numeric precedence for the rule. Larger numbers are evaluated earlier." />
                         <Input value={draft.priority} onChange={(e) => setDraft((cur) => ({ ...cur, priority: e.target.value }))} inputMode="numeric" />
                       </div>
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Pattern</Label>
+                      <HelpTip label="Rule pattern help" content="Pattern matched by the rule. For read-only rules this shows the current backend value." />
                       <Input value={draft.pattern} onChange={(e) => setDraft((cur) => ({ ...cur, pattern: e.target.value }))} className="font-mono text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Replacement</Label>
+                      <HelpTip label="Rule replacement help" content="Replacement applied when the rule matches. Often empty for non-transform rules." />
                       <Input value={draft.replacement} onChange={(e) => setDraft((cur) => ({ ...cur, replacement: e.target.value }))} className="font-mono text-sm" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Description</Label>
+                      <HelpTip label="Rule description help" content="Short explanation of why the rule exists and what it is meant to catch." />
                       <Textarea value={draft.description} onChange={(e) => setDraft((cur) => ({ ...cur, description: e.target.value }))} className="min-h-[100px]" />
                     </div>
                     <div className="flex items-center justify-between rounded-md border px-3 py-2">
                       <div>
                         <div className="text-sm font-medium">Enabled</div>
-                        <div className="text-xs text-muted-foreground">Draft state only until create endpoint exists.</div>
+                        <div className="text-xs text-muted-foreground">Draft state will persist to the selected ruleset.</div>
                       </div>
                       <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft((cur) => ({ ...cur, enabled: checked }))} />
                     </div>
                     <div className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                      <span>Save disabled until backend exposes rule creation.</span>
-                      <Button size="sm" disabled>
+                      <span>Backend-backed create writes a new rule under the selected ruleset.</span>
+                      <Button size="sm" onClick={onCreateRule} disabled={busyRuleId === "create"}>
                         <Save className="mr-1 h-3.5 w-3.5" />
-                        Create unavailable
+                        {busyRuleId === "create" ? "Creating..." : "Create rule"}
                       </Button>
                     </div>
                   </div>
@@ -338,10 +391,12 @@ export default function Rules() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Name</Label>
+                      <HelpTip label="Rule name help" content="Human-readable name for the rule. Useful when scanning the precedence list." />
                       <Input value={selectedRule.name} readOnly className="bg-muted/40" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Type</Label>
+                      <HelpTip label="Rule type help" content="High-level category describing what this rule changes or protects." />
                       <Input value={selectedRule.rule_type} readOnly className="bg-muted/40" />
                     </div>
                   </div>
@@ -349,6 +404,7 @@ export default function Rules() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label className="text-xs uppercase tracking-wider text-muted-foreground">Priority</Label>
+                      <HelpTip label="Rule priority help" content="Numeric precedence for the rule. Larger numbers are evaluated earlier." />
                       <Input value={draft.priority} onChange={(e) => setDraft((cur) => ({ ...cur, priority: e.target.value }))} inputMode="numeric" />
                     </div>
                     <div className="flex items-center justify-between rounded-md border px-3 py-2">
@@ -362,14 +418,17 @@ export default function Rules() {
 
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">Pattern</Label>
+                    <HelpTip label="Rule pattern help" content="Pattern matched by the rule. Read-only here because the backend only persists enabled and priority today." />
                     <Input value={selectedRule.pattern ?? ""} readOnly className="font-mono text-sm bg-muted/40" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">Replacement</Label>
+                    <HelpTip label="Rule replacement help" content="Replacement applied when the rule matches. Read-only until create/edit contracts exist." />
                     <Input value={selectedRule.replacement ?? ""} readOnly className="font-mono text-sm bg-muted/40" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs uppercase tracking-wider text-muted-foreground">Description</Label>
+                    <HelpTip label="Rule description help" content="Short explanation of why the rule exists and what it is meant to catch." />
                     <Textarea value={selectedRule.description ?? ""} readOnly className="min-h-[100px] bg-muted/40" />
                   </div>
 
@@ -391,24 +450,25 @@ export default function Rules() {
             <Card className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold">Sandbox · dry-run</h3>
-                <span className="text-xs text-muted-foreground">No backend contract yet</span>
+                <HelpTip label="Dry-run help" content="Send a sample string through the selected ruleset and inspect the transformed result." />
+                <span className="text-xs text-muted-foreground">Backend-backed</span>
               </div>
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-                <div className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="h-4 w-4" />
-                  Missing dry-run contract
-                </div>
-                <p className="mt-1">
-                  The console backend does not expose a rules dry-run endpoint. The only rule mutation contract currently available is `PATCH /console/rules/{rule_id}` for `enabled` and `priority`.
-                  A true dry-run needs a dedicated endpoint that accepts the draft input and returns the pipeline stage output.
-                </p>
+              <div className="rounded-md border bg-surface-sunken/40 p-3 text-xs text-muted-foreground">
+                {activeId ? "Run the selected ruleset against a sample input." : "Select a ruleset to enable the dry-run sandbox."}
               </div>
               <Textarea value={sandboxInput} onChange={(e) => setSandboxInput(e.target.value)} className="font-mono text-xs min-h-[120px]" />
               <PermissionGuard require="operator" inline>
-                <Button size="sm" disabled>
-                  Run dry-run
+                <Button size="sm" onClick={onRunDryRun} disabled={dryRunLoading || !activeId}>
+                  {dryRunLoading ? "Running..." : "Run dry-run"}
                 </Button>
               </PermissionGuard>
+              {dryRunSummary && (
+                <div className="rounded-md border bg-card p-3 text-xs text-muted-foreground">
+                  <div className="font-medium text-foreground">Summary</div>
+                  <div className="mt-1">{dryRunSummary}</div>
+                </div>
+              )}
+              {dryRunResult && <Textarea value={dryRunResult} readOnly className="font-mono text-xs min-h-[120px]" />}
 
               <div className="space-y-3 border-t pt-3">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">Ask LLM about this ruleset</Label>

@@ -23,6 +23,7 @@ import type {
   Delivery,
   DeliveryTarget,
   HealthSnapshot,
+  BackendConsoleSettingsResponse,
   IntakeNote,
   LlmRun,
   LogEntry,
@@ -42,6 +43,9 @@ import type {
   PfPromptGenerationStatus,
   PfScope,
   PfTargetType,
+  TargetDispatchRequest,
+  TargetDispatchResult,
+  TargetHealth,
 } from "./types";
 import { STRICT_BACKEND, logBackendFallback, shouldUseMockData } from "./config";
 import { ApiError, BackendUnavailableError, NotFoundError, ValidationError } from "./errors";
@@ -217,6 +221,8 @@ export const qk = {
   termDict: (params: unknown) => ["pf", "dict", "list", params] as const,
   templates: (params: unknown) => ["pf", "templates", "list", params] as const,
   targets: (type?: PfTargetType) => ["pf", "targets", type] as const,
+  targetHealth: (id: string) => ["pf", "targets", "health", id] as const,
+  settings: (scope?: PfScope, projectId?: string | null) => ["pf", "settings", scope ?? "global", projectId ?? null] as const,
   logsList: (params: unknown) => ["pf", "logs", "list", params] as const,
   errorFingerprints: ["pf", "logs", "fingerprints"] as const,
   llmRunsAgg: ["pf", "llm", "agg"] as const,
@@ -581,6 +587,77 @@ export async function listRules(rulesetId: string): Promise<Rule[]> {
   }
 }
 
+export interface RuleCreatePayload {
+  rulesetId: string;
+  ruleType: Rule["rule_type"];
+  priority: number;
+  enabled: boolean;
+  matchConditionsJson: Record<string, unknown>;
+  actionJson: Record<string, unknown>;
+  notes?: string;
+}
+
+export async function createRule(payload: RuleCreatePayload): Promise<Rule> {
+  try {
+    const response = await postJson<{ rule: Rule }>("/console/rules", payload);
+    await ensureHydrated(true);
+    return response.rule;
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge create rule", error);
+    await delay(180);
+    const now = new Date().toISOString();
+    const rule: Rule = {
+      id: `rule-${Math.random().toString(36).slice(2, 10)}`,
+      ruleset_id: payload.rulesetId,
+      name: payload.notes?.trim() || payload.ruleType,
+      rule_type: payload.ruleType,
+      priority: payload.priority,
+      enabled: payload.enabled,
+      pattern: JSON.stringify(payload.matchConditionsJson),
+      replacement: JSON.stringify(payload.actionJson),
+      description: payload.notes,
+      updated_at: now,
+    };
+    rules.unshift(rule);
+    return rule;
+  }
+}
+
+export interface RulesetDryRunResult {
+  transformedOutput: string;
+  summary: {
+    totalRules: number;
+    matchedRules: number;
+    failedRules: number;
+    metadata: Record<string, unknown>;
+  };
+  matchedRules: Array<Record<string, unknown>>;
+}
+
+export async function runRulesetDryRun(rulesetId: string, sampleText: string, context: Record<string, unknown> = {}): Promise<RulesetDryRunResult> {
+  try {
+    return await postJson<RulesetDryRunResult>(`/console/rulesets/${rulesetId}/dry-run`, {
+      sampleText,
+      context,
+    });
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback(`promptforge dry-run ${rulesetId}`, error);
+    await delay(180);
+    return {
+      transformedOutput: sampleText,
+      summary: {
+        totalRules: 0,
+        matchedRules: 0,
+        failedRules: 0,
+        metadata: { ruleset_id: rulesetId, mock_fallback: true },
+      },
+      matchedRules: [],
+    };
+  }
+}
+
 // ──────────────────────────── Term dictionary (Q14)
 export interface TermFilters extends PageParams {
   scope?: PfScope;
@@ -650,6 +727,72 @@ export async function listTemplates(f: TemplateFilters = {}): Promise<PageResult
   }
 }
 
+export interface TemplateUpsertPayload {
+  id?: string;
+  name: string;
+  promptType: string;
+  scope: PfScope;
+  projectId?: string | null;
+  version: number;
+  isActive: boolean;
+  templateFamilyKey: string;
+  body: string;
+}
+
+export async function upsertTemplate(payload: TemplateUpsertPayload): Promise<PromptTemplate> {
+  const requestBody = {
+    name: payload.name,
+    promptType: payload.promptType,
+    scope: payload.scope,
+    projectId: payload.projectId ?? null,
+    version: payload.version,
+    isActive: payload.isActive,
+    templateFamilyKey: payload.templateFamilyKey,
+    body: payload.body,
+  };
+
+  try {
+    const response = await postJson<{ prompt_template: PromptTemplate }>(
+      payload.id ? `/console/templates/${payload.id}` : "/console/templates",
+      requestBody,
+      payload.id ? "PATCH" : "POST",
+    );
+    await ensureHydrated(true);
+    return response.prompt_template;
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge template upsert", error);
+    await delay(180);
+    const now = new Date().toISOString();
+    const template: PromptTemplate = {
+      id: payload.id ?? `tmpl-${Math.random().toString(36).slice(2, 10)}`,
+      name: payload.name,
+      prompt_type: payload.promptType,
+      scope: payload.scope,
+      project_id: payload.projectId ?? null,
+      version: payload.version,
+      is_active: payload.isActive,
+      template_family_key: payload.templateFamilyKey,
+      body: payload.body,
+      updated_at: now,
+    };
+    const index = promptTemplates.findIndex((row) => row.id === template.id);
+    if (index >= 0) {
+      promptTemplates[index] = { ...promptTemplates[index], ...template };
+    } else {
+      promptTemplates.unshift(template);
+    }
+    if (template.is_active) {
+      promptTemplates.forEach((row) => {
+        if (row.id !== template.id && row.template_family_key === template.template_family_key && row.scope === template.scope && row.project_id === template.project_id) {
+          row.is_active = false;
+        }
+      });
+    }
+    return template;
+  }
+}
+
 // ──────────────────────────── Targets (Q16)
 export async function listTargets(type?: PfTargetType): Promise<DeliveryTarget[]> {
   try {
@@ -664,6 +807,58 @@ export async function listTargets(type?: PfTargetType): Promise<DeliveryTarget[]
     logBackendFallback("promptforge targets", error);
     await delay();
     return type ? deliveryTargets.filter((t) => t.target_type === type) : deliveryTargets;
+  }
+}
+
+export async function getTargetHealth(targetId: string): Promise<TargetHealth> {
+  try {
+    return await fetchJson<TargetHealth>(`/console/targets/${targetId}/health`);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback(`promptforge target health ${targetId}`, error);
+    await delay(80);
+    const target = deliveryTargets.find((row) => row.id === targetId);
+    return {
+      targetId,
+      targetType: target?.target_type ?? "none",
+      healthStatus: target?.validation_status ?? "unknown",
+      detail: "mock_fallback",
+    };
+  }
+}
+
+export async function dispatchTarget(targetId: string, payload: TargetDispatchRequest): Promise<TargetDispatchResult> {
+  try {
+    return await postJson<TargetDispatchResult>(`/console/targets/${targetId}/dispatch`, {
+      promptGenerationId: payload.promptGenerationId,
+      payloadContent: payload.payloadContent,
+      targetSessionIdentifier: payload.targetSessionIdentifier || undefined,
+    });
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback(`promptforge target dispatch ${targetId}`, error);
+    await delay(180);
+    const target = deliveryTargets.find((row) => row.id === targetId);
+    return {
+      targetId,
+      targetType: target?.target_type ?? "none",
+      promptGenerationId: payload.promptGenerationId,
+      accepted: true,
+      status: "queued",
+      machineStatus: "queued",
+      externalIdentifier: null,
+      sessionIdentifier: payload.targetSessionIdentifier ?? null,
+      errorText: null,
+      requestSummary: {
+        target_id: targetId,
+        prompt_generation_id: payload.promptGenerationId,
+        target_session_identifier: payload.targetSessionIdentifier ?? null,
+      },
+      responseSummary: {
+        machine_status: "queued",
+      },
+      deliveryId: `mock-delivery-${Math.random().toString(36).slice(2, 10)}`,
+    };
   }
 }
 
@@ -713,7 +908,7 @@ export async function listLogs(f: LogFilters = {}): Promise<PageResult<LogEntry>
     return await fetchPageResult<LogEntry>(buildQueryPath("/console/logs", {
       limit: pageSize,
       offset: (page - 1) * pageSize,
-      source: f.service,
+      service: f.service,
       level: f.level,
       intake_note_id: f.intakeNoteId,
       utterance_id: f.utteranceId,
@@ -795,6 +990,84 @@ export async function getProjectThroughput() {
       failed_processing: processingRuns.filter((r) => notes.some((n) => n.id === r.intake_note_id) && r.status === "failed").length,
     };
   });
+}
+
+// ──────────────────────────── Settings
+export async function getConsoleSettings(scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
+  try {
+    return await fetchJson<BackendConsoleSettingsResponse>(buildQueryPath("/console/settings", {
+      scope,
+      project_id: projectId,
+    }));
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge console settings", error);
+    await delay(80);
+    return {
+      scope: "global",
+      project_id: null,
+      runtime: {
+        obsidianVaultPath: "/vault",
+        webhookUrl: "",
+        llmMode: "deterministic_only",
+        codexBinary: "codex",
+        codexReasoningEffort: "medium",
+        openaiBaseUrl: "https://api.openai.com/v1",
+        anthropicBaseUrl: "https://api.anthropic.com",
+      },
+      secrets: {},
+      permissions: {
+        can_update_runtime: false,
+        can_rotate_secrets: false,
+        can_purge_archived_notes: false,
+      },
+      updated_at: new Date().toISOString(),
+    };
+  }
+}
+
+export async function patchConsoleRuntimeSettings(runtime: Record<string, unknown>, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
+  try {
+    return await postJson<BackendConsoleSettingsResponse>("/console/settings/runtime", {
+      scope: scope ?? "global",
+      project_id: projectId ?? null,
+      runtime,
+    }, "PATCH");
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge runtime settings patch", error);
+    await delay(160);
+    return getConsoleSettings(scope, projectId);
+  }
+}
+
+export async function patchConsoleSecretSettings(secrets: Record<string, string>, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
+  try {
+    return await postJson<BackendConsoleSettingsResponse>("/console/settings/secrets", {
+      scope: scope ?? "global",
+      project_id: projectId ?? null,
+      secrets,
+    }, "PATCH");
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge secret settings patch", error);
+    await delay(160);
+    return getConsoleSettings(scope, projectId);
+  }
+}
+
+export async function purgeArchivedNotes(confirm = "purge archived notes") {
+  try {
+    return await postJson<{ ok?: boolean; deletedCounts?: Record<string, number> }>(
+      "/console/admin/purge-archived-notes",
+      { confirm },
+    );
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge purge archived notes", error);
+    await delay(180);
+    return { ok: true, deletedCounts: { intake_notes: 0, utterances: 0, transcript_revisions: 0, prompt_generations: 0, llm_runs: 0, deliveries: 0, processing_runs: 0 } };
+  }
 }
 
 // ──────────────────────────── Mutations (M1–M5 + actions)
@@ -886,33 +1159,19 @@ function buildTemplateFamilyKey(name: string, promptType: string) {
 }
 
 export async function upsertTemplateLocal(payload: Partial<PromptTemplate>) {
-  await delay(120);
-  const now = new Date().toISOString();
-  const template: PromptTemplate = {
-    id: payload.id ?? `tmpl-${Math.random().toString(36).slice(2, 10)}`,
-    name: payload.name ?? "Untitled template",
-    prompt_type: payload.prompt_type ?? "agent_task",
+  const promptType = payload.prompt_type ?? "agent_task";
+  const name = payload.name ?? "Untitled template";
+  const template = await upsertTemplate({
+    id: payload.id,
+    name,
+    promptType,
     scope: payload.scope ?? "global",
-    project_id: payload.project_id ?? null,
+    projectId: payload.project_id ?? null,
     version: payload.version ?? 1,
-    is_active: payload.is_active ?? false,
-    template_family_key: payload.template_family_key ?? buildTemplateFamilyKey(payload.name ?? "Untitled template", payload.prompt_type ?? "agent_task"),
+    isActive: payload.is_active ?? false,
+    templateFamilyKey: payload.template_family_key ?? buildTemplateFamilyKey(name, promptType),
     body: payload.body ?? "",
-    updated_at: now,
-  };
-  const index = promptTemplates.findIndex((row) => row.id === template.id);
-  if (index >= 0) {
-    promptTemplates[index] = { ...promptTemplates[index], ...template };
-  } else {
-    promptTemplates.unshift(template);
-  }
-  if (template.is_active) {
-    promptTemplates.forEach((row) => {
-      if (row.id !== template.id && row.template_family_key === template.template_family_key && row.scope === template.scope && row.project_id === template.project_id) {
-        row.is_active = false;
-      }
-    });
-  }
+  });
   return { ok: true, template };
 }
 export async function activateTemplate(id: string, family: string) {

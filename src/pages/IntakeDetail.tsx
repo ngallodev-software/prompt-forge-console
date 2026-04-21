@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getIntakeNote, getNoteLineage, qk } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { StatusBadge } from "@/components/pf/StatusBadge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export default function IntakeDetail() {
         breadcrumb={<Link to="/intake" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3 w-3" /> Intake</Link>}
         title={<span className="font-mono text-base sm:text-lg">{note.note_relative_path}</span>}
         description={<span className="font-mono text-xs">{note.id}</span>}
+        help={{ label: "Intake detail help", content: "This page shows the raw note, its frontmatter, metadata, and all downstream artifacts linked to the note." }}
         actions={
           <>
             <StatusBadge value={note.status} size="md" />
@@ -56,16 +58,25 @@ export default function IntakeDetail() {
           </div>
           <div className="space-y-4">
             <Card className="p-4 space-y-2 text-sm">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Eligibility</div>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
+                <span>Eligibility</span>
+                <HelpTip label="Eligibility help" content="Explains whether the note qualifies for watch processing and why it may have been skipped." />
+              </div>
               <div>Watch: <strong>{String(note.watch_eligible)}</strong></div>
               <div className="font-mono text-xs">{String(note.metadata_json?.eligibility_reason ?? "—")}</div>
               {note.metadata_json?.skip_cause && <div className="text-status-warn font-mono text-xs">Skip: {String(note.metadata_json.skip_cause)}</div>}
             </Card>
-            <RelatedArtifactsPanel items={[
-              ...(lineage?.utterances ?? []).map(u => ({ id: u.id, label: u.id, to: `/pipeline/${note.id}`, type: "utt" })),
-              ...(lineage?.promptGenerations ?? []).map(p => ({ id: p.id, label: p.prompt_type, to: `/prompts?id=${p.id}`, type: "prompt", meta: <StatusBadge value={p.status} /> })),
-              ...(lineage?.deliveries ?? []).map(d => ({ id: d.id, label: `→ ${d.destination}`, to: `/deliveries?id=${d.id}`, type: "del", meta: <StatusBadge value={d.status} /> })),
-            ]} />
+            <Card className="p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Linked artifacts</h3>
+                <HelpTip label="Linked artifacts help" content="Cross-links to utterances, prompt generations, and deliveries associated with this note." />
+              </div>
+              <RelatedArtifactsPanel items={[
+                ...(lineage?.utterances ?? []).map(u => ({ id: u.id, label: u.id, to: `/pipeline/${note.id}`, type: "utt" })),
+                ...(lineage?.promptGenerations ?? []).map(p => ({ id: p.id, label: p.prompt_type, to: `/prompts?id=${p.id}`, type: "prompt", meta: <StatusBadge value={p.status} /> })),
+                ...(lineage?.deliveries ?? []).map(d => ({ id: d.id, label: `→ ${d.destination}`, to: `/deliveries?id=${d.id}`, type: "del", meta: <StatusBadge value={d.status} /> })),
+              ]} />
+            </Card>
           </div>
         </div>
       </PageBody>

@@ -1,4 +1,4 @@
-// Query catalog (Q1–Q20) — used by QueryInspector and Settings → Query Catalog page.
+// Query catalog (Q1–Q20) — used by QueryInspector and query-driven diagnostics/docs.
 
 export interface CatalogQuery {
   id: string;

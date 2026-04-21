@@ -11,32 +11,19 @@ import { RelatedArtifactsPanel } from "@/components/pf/RelatedArtifactsPanel";
 import { LoadingState } from "@/components/pf/LoadingState";
 import { StatusBadge, statusTone } from "@/components/pf/StatusBadge";
 import { QueryInspector } from "@/components/pf/QueryInspector";
+import { OpsSurfaceIntro } from "@/components/pf/OpsSurfaceIntro";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, CircleHelp, Inbox } from "lucide-react";
+import { ArrowLeft, Inbox } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { listIntakeNotes } from "@/services/promptforge";
 import { cn } from "@/lib/utils";
+import { HelpTip } from "@/components/pf/HelpTip";
 
 const expectedProcessingStages = ["preprocess", "validate", "render", "prepare-delivery"] as const;
 
 function parseRuleId(errorText?: string | null) {
   return errorText?.match(/rule_id=([^\s]+)/)?.[1];
-}
-
-function HelpTip({ label, content }: { label: string; content: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button type="button" className="inline-flex items-center text-muted-foreground transition-colors hover:text-foreground" aria-label={label}>
-          <CircleHelp className="h-3.5 w-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top" align="center" className="max-w-xs text-xs leading-5">
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 export default function Pipeline() {
@@ -168,6 +155,10 @@ export default function Pipeline() {
           )}
           title="Pipeline trace"
           description={<span className="font-mono text-xs">{data?.note?.note_relative_path}</span>}
+          help={{
+            label: "Pipeline trace help",
+            content: "Trace the note through revisions, prompt generations, deliveries, and processing runs. Gaps show where backend state is missing or the pipeline stopped.",
+          }}
           actions={(
             <Tooltip>
               <TooltipTrigger asChild>
@@ -179,6 +170,24 @@ export default function Pipeline() {
         />
         <PageBody>
           <QueryInspector />
+          <OpsSurfaceIntro
+            eyebrow="Workflow guide"
+            title="How to use the pipeline trace"
+            purpose="Start here when you need to understand where one intake note stopped, what it produced, and which downstream record is broken."
+            description="This page is a guided lineage view. Use the summary to find the break, then drill into the specific revision, prompt, delivery, or run that explains it."
+            steps={[
+              "Read the diagnostics panel first to see which stages exist and which are missing.",
+              "Open a failed run or delivery only after you know whether the problem is in transcription, rendering, dispatch, or execution.",
+              "Use the revision diff when you need wording detail, not as the first step.",
+            ]}
+            metrics={[
+              { label: "Coverage", value: diagnostics ? `${diagnostics.lineageCoverage}/6` : "—", detail: "Stages present in the lineage chain", tone: diagnostics && diagnostics.lineageCoverage === 6 ? "success" : "warn" },
+              { label: "Prompts", value: diagnostics?.counts.promptGenerations ?? "—", detail: "Prompt generations attached to this note" },
+              { label: "Deliveries", value: diagnostics?.counts.deliveries ?? "—", detail: "Dispatch attempts tied to the lineage" },
+              { label: "Runs", value: diagnostics?.counts.processingRuns ?? "—", detail: "Pipeline stage executions recorded" },
+            ]}
+            note="If the trace looks complete but the note still failed, the problem is usually in the last stage that turned red rather than the whole chain."
+          />
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2 p-4 space-y-4">
               <div className="flex items-start justify-between gap-3">
@@ -246,26 +255,19 @@ export default function Pipeline() {
                   ]}
                 />
               )}
-              <Card className="p-4">
+              <Card className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold">Hover-help sweep order</h3>
+                  <h3 className="text-sm font-semibold">Related artifacts</h3>
                   <HelpTip
-                    label="Hover-help sweep order"
-                    content="Add hover help in this order: navigation exits first, destructive or state-changing actions second, dense inspectors and filters third, timeline and history rows fourth, then status badges or field labels only where ambiguity remains."
+                    label="Related artifacts help"
+                    content="Cross-links into the intake note and downstream deliveries tied to this lineage trace."
                   />
                 </div>
-                <ol className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <li>1. Back and exit controls.</li>
-                  <li>2. State-changing actions and retry buttons.</li>
-                  <li>3. Inspectors, filters, and debug toggles.</li>
-                  <li>4. Timeline rows and revision diffs.</li>
-                  <li>5. Status badges, IDs, and field labels only when the meaning is not obvious.</li>
-                </ol>
+                <RelatedArtifactsPanel items={[
+                  { id: "intake", label: "Intake note", to: `/intake/${targetId}`, type: "note" },
+                  ...(data?.deliveries ?? []).map(d => ({ id: d.id, label: `Delivery ${d.id.slice(-6)}`, to: `/deliveries`, type: "del", meta: <StatusBadge value={d.status} /> })),
+                ]} />
               </Card>
-              <RelatedArtifactsPanel items={[
-                { id: "intake", label: "Intake note", to: `/intake/${targetId}`, type: "note" },
-                ...(data?.deliveries ?? []).map(d => ({ id: d.id, label: `Delivery ${d.id.slice(-6)}`, to: `/deliveries`, type: "del", meta: <StatusBadge value={d.status} /> })),
-              ]} />
             </div>
           </div>
           {selectedRev && (

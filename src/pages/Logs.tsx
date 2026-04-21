@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { listLogs, getErrorFingerprints, qk } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { LogStream } from "@/components/pf/LogStream";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { QueryInspector } from "@/components/pf/QueryInspector";
+import { OpsSurfaceIntro } from "@/components/pf/OpsSurfaceIntro";
 import type { LogEntry } from "@/services/promptforge/types";
 
 export default function Logs() {
@@ -21,10 +23,30 @@ export default function Logs() {
 
   return (
     <>
-      <PageHeader title="Log center" description="Structured logs across watcher, api, n8n, and postgres." />
+      <PageHeader title="Log center" description="Structured activity logs across watcher, api, n8n, and postgres." help={{ label: "Log center help", content: "Use this page to narrow activity logs by service and severity, then jump from an error fingerprint into the exact problem area. The stream is built from persisted backend activity, not raw container stdout." }} />
       <PageBody>
         <QueryInspector />
+        <OpsSurfaceIntro
+          eyebrow="Observability"
+          title="What the logs page is for"
+          purpose="This is the operational activity stream. It is built from persisted backend records, not raw container stdout, so it tells you what happened in the workflow."
+          description="Use the service and severity filters to narrow the stream, then jump from repeated fingerprints into the underlying page or trace."
+          steps={[
+            "Filter by service when you already know whether the issue belongs to watcher, api, n8n, or postgres.",
+            "Use severity when you are chasing a failure mode and need to ignore routine chatter.",
+            "Use the error fingerprints list when the same failure repeats across multiple records.",
+          ]}
+          metrics={[
+            { label: "Visible logs", value: data?.rows.length ?? 0, detail: "Rows returned for the current filter set" },
+            { label: "Fingerprints", value: fps?.length ?? 0, detail: "Repeated error shapes currently ranked at the top" },
+          ]}
+          note="If you need raw container logs, that is a different feature. This page is intentionally centered on workflow activity."
+        />
         <Card className="p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Log filters</h3>
+            <HelpTip label="Log filters help" content="Service and severity filters shrink the activity stream to the slice you are actively debugging." />
+          </div>
           <Tabs value={service ?? "all"} onValueChange={(v) => setService(v === "all" ? undefined : (v as LogEntry["service"]))}>
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
@@ -50,7 +72,10 @@ export default function Logs() {
           <LogStream logs={data?.rows ?? []} />
         </Card>
         <Card className="p-4">
-          <h3 className="text-sm font-semibold mb-2">Top error fingerprints (Q19)</h3>
+          <div className="mb-2 flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Top error fingerprints (Q19)</h3>
+            <HelpTip label="Error fingerprints help" content="Grouped error signatures from logs. Useful for spotting repeated failures without reading every line." />
+          </div>
           <ul className="divide-y">
             {fps?.map(f => (
               <li key={f.fingerprint} className="flex items-center gap-3 py-2 text-sm">

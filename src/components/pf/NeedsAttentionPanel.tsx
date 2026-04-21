@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
+import { HelpTip } from "./HelpTip";
 
 export interface AttentionItem {
   id: string;
@@ -11,11 +12,26 @@ export interface AttentionItem {
   meta?: ReactNode;
 }
 
-export function NeedsAttentionPanel({ title, items, emptyMessage = "All clear", className }: { title: string; items: AttentionItem[]; emptyMessage?: string; className?: string }) {
+export function NeedsAttentionPanel({
+  title,
+  items,
+  emptyMessage = "All clear",
+  help,
+  className,
+}: {
+  title: string;
+  items: AttentionItem[];
+  emptyMessage?: string;
+  help?: { label: string; content: ReactNode };
+  className?: string;
+}) {
   return (
     <Card className={cn("flex flex-col", className)}>
       <div className="border-b px-4 py-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{title}</h3>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold">{title}</h3>
+          {help && <HelpTip label={help.label} content={help.content} />}
+        </div>
         <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground">{items.length}</span>
       </div>
       <div className="flex-1 divide-y">

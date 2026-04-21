@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listProjects, listTerms, qk, upsertTerm } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { DataTable, type Column } from "@/components/pf/DataTable";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { ScopeBadge } from "@/components/pf/ScopeBadge";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { Button } from "@/components/ui/button";
@@ -173,19 +174,19 @@ export default function Dictionary() {
   };
 
   const columns: Column<TermDictionaryEntry>[] = [
-    { key: "src", header: "Source", cell: (r) => <span className="font-mono text-sm">{r.source_term}</span> },
-    { key: "norm", header: "Normalized", cell: (r) => <span className="font-mono text-sm font-medium">{r.normalized_term}</span> },
-    { key: "scope", header: "Scope", cell: (r) => <ScopeBadge value={r.scope} /> },
+    { key: "src", header: <span className="inline-flex items-center gap-1.5">Source<HelpTip label="Source term help" content="Original term or phrase captured from the note or content stream before normalization." /></span>, cell: (r) => <span className="font-mono text-sm">{r.source_term}</span> },
+    { key: "norm", header: <span className="inline-flex items-center gap-1.5">Normalized<HelpTip label="Normalized term help" content="Canonical term that rules and templates should use instead of the original wording." /></span>, cell: (r) => <span className="font-mono text-sm font-medium">{r.normalized_term}</span> },
+    { key: "scope", header: <span className="inline-flex items-center gap-1.5">Scope<HelpTip label="Dictionary scope help" content="Whether the mapping applies globally, per user, or per project." /></span>, cell: (r) => <ScopeBadge value={r.scope} /> },
     {
       key: "project",
-      header: "Project",
+      header: <span className="inline-flex items-center gap-1.5">Project<HelpTip label="Dictionary project help" content="Project-scoped terms are only used when the current workspace is narrowed to that project." /></span>,
       cell: (r) => (
         <span className="text-sm text-muted-foreground">
           {r.scope === "project" ? projectNameById.get(r.project_id ?? "") ?? r.project_id ?? "Unassigned" : "—"}
         </span>
       ),
     },
-    { key: "desc", header: "Description", hideOnMobile: true, cell: (r) => <span className="text-xs text-muted-foreground">{r.description ?? "—"}</span> },
+    { key: "desc", header: <span className="inline-flex items-center gap-1.5">Description<HelpTip label="Dictionary description help" content="Short note explaining why the mapping exists and when it should be used." /></span>, hideOnMobile: true, cell: (r) => <span className="text-xs text-muted-foreground">{r.description ?? "—"}</span> },
     { key: "edit", header: "", cell: (r) => <span className="text-xs text-muted-foreground">Edit</span> },
   ];
 
@@ -194,6 +195,7 @@ export default function Dictionary() {
       <PageHeader
         title="Term dictionary"
         description="Normalize terminology across rules, templates, and renderers."
+        help={{ label: "Term dictionary help", content: "Use the dictionary to keep source wording and canonical wording aligned across rules, templates, and renderers." }}
         actions={
           <PermissionGuard require="operator" inline>
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
@@ -256,14 +258,17 @@ export default function Dictionary() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="source_term">Source term</Label>
+                <HelpTip label="Source term field help" content="The raw term or phrase you want to map from." />
                 <Input id="source_term" value={termForm.source_term} onChange={(e) => setTermForm((prev) => ({ ...prev, source_term: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="normalized_term">Normalized term</Label>
+                <HelpTip label="Normalized term field help" content="The canonical term you want to use in rules and templates." />
                 <Input id="normalized_term" value={termForm.normalized_term} onChange={(e) => setTermForm((prev) => ({ ...prev, normalized_term: e.target.value }))} />
               </div>
               <div className="space-y-2">
                 <Label>Scope</Label>
+                <HelpTip label="Scope field help" content="Choose where this mapping applies. Narrower scopes override broader ones." />
                 <Select value={termForm.scope} onValueChange={(value) => setTermForm((prev) => ({ ...prev, scope: value as PfScope, project_id: value === "project" ? prev.project_id || projectId || "" : "" }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select scope" />
@@ -277,6 +282,7 @@ export default function Dictionary() {
               </div>
               <div className="space-y-2">
                 <Label>Project</Label>
+                <HelpTip label="Project field help" content="Only required when the term is scoped to a project." />
                 <Select
                   value={termForm.project_id || "none"}
                   onValueChange={(value) => setTermForm((prev) => ({ ...prev, project_id: value === "none" ? "" : value }))}
@@ -297,6 +303,7 @@ export default function Dictionary() {
               </div>
               <div className="sm:col-span-2 space-y-2">
                 <Label htmlFor="description">Description</Label>
+                <HelpTip label="Description field help" content="Optional human-readable note about the normalization rule or mapping." />
                 <Textarea
                   id="description"
                   value={termForm.description}

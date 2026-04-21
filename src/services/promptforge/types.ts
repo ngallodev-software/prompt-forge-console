@@ -165,6 +165,34 @@ export interface DeliveryTarget {
   updated_at: string;
 }
 
+export interface TargetHealth {
+  targetId: string;
+  targetType: PfTargetType;
+  healthStatus: "ok" | "degraded" | "unknown" | "error";
+  detail: string;
+}
+
+export interface TargetDispatchRequest {
+  promptGenerationId: string;
+  payloadContent: string;
+  targetSessionIdentifier?: string;
+}
+
+export interface TargetDispatchResult {
+  targetId: string;
+  targetType: PfTargetType;
+  promptGenerationId: string;
+  accepted: boolean;
+  status: string;
+  machineStatus: string;
+  externalIdentifier: string | null;
+  sessionIdentifier: string | null;
+  errorText: string | null;
+  requestSummary: Record<string, unknown>;
+  responseSummary: Record<string, unknown>;
+  deliveryId: string;
+}
+
 export interface Delivery {
   id: string;
   prompt_generation_id: string;
@@ -215,6 +243,29 @@ export interface HealthSnapshot {
 export interface ConsoleSettings {
   apiBaseUrl: string;
   bootstrapPath: string;
+}
+
+export interface BackendConsoleRuntimeSettings {
+  obsidianVaultPath: string;
+  webhookUrl: string;
+  llmMode: LlmMode;
+  codexBinary: string;
+  codexReasoningEffort: string;
+  openaiBaseUrl: string;
+  anthropicBaseUrl: string;
+}
+
+export interface BackendConsoleSettingsResponse {
+  scope: PfScope;
+  project_id: string | null;
+  runtime: BackendConsoleRuntimeSettings;
+  secrets: Record<string, { configured: boolean; last_rotated_at: string | null }>;
+  permissions: {
+    can_update_runtime: boolean;
+    can_rotate_secrets: boolean;
+    can_purge_archived_notes: boolean;
+  };
+  updated_at: string;
 }
 
 export interface PageParams {

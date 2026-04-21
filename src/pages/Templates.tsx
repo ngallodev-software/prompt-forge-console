@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listProjects, listTemplates, activateTemplate, llmAssist, qk, upsertTemplateLocal } from "@/services/promptforge";
+import { listProjects, listTemplates, activateTemplate, llmAssist, qk, upsertTemplate } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/pf/EmptyState";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -111,24 +112,23 @@ export default function Templates() {
   const saveDraft = async () => {
     setEditorBusy(true);
     try {
-      const payload: Partial<PromptTemplate> = {
+      const saved = await upsertTemplate({
         id: draft.id,
         name: draft.name.trim(),
-        prompt_type: draft.prompt_type.trim() || "agent_task",
+        promptType: draft.prompt_type.trim() || "agent_task",
         scope: draft.scope,
-        project_id: draft.scope === "project" ? draft.project_id || workspace.projectId || null : null,
+        projectId: draft.scope === "project" ? draft.project_id || workspace.projectId || null : null,
         version: draft.version,
-        is_active: draft.is_active,
-        template_family_key: draft.template_family_key.trim() || slugifyTemplateKey(draft.name, draft.prompt_type),
+        isActive: draft.is_active,
+        templateFamilyKey: draft.template_family_key.trim() || slugifyTemplateKey(draft.name, draft.prompt_type),
         body: draft.body,
-      };
-      const saved = await upsertTemplateLocal(payload);
+      });
       await qc.invalidateQueries({ queryKey: ["pf", "templates"] });
       toast({
-        title: draft.id ? "Template draft updated" : "Template draft created",
-        description: "Saved in the current session. Backend write endpoints are still missing.",
+        title: draft.id ? "Template updated" : "Template created",
+        description: "Saved against the backend template store.",
       });
-      setSelectedId(saved.template.id);
+      setSelectedId(saved.id);
       setEditorOpen(false);
     } catch (error) {
       toast({
@@ -161,6 +161,7 @@ export default function Templates() {
       <PageHeader
         title="Prompt templates"
         description="Versioned templates with safe activation flow."
+        help={{ label: "Prompt templates help", content: "Use this page to inspect template families, versions, scope, and activation state before publishing a template." }}
         actions={
           <PermissionGuard require="operator" inline>
             <Button size="sm" variant="outline" onClick={openNewTemplate}>
@@ -173,9 +174,9 @@ export default function Templates() {
       <PageBody>
         <QueryInspector />
         <Alert>
-          <AlertTitle>Write contract gap</AlertTitle>
+          <AlertTitle>Backend-backed writes</AlertTitle>
           <AlertDescription>
-            Create/edit now works as a local draft flow. The missing backend contract is `POST /console/templates` and `PATCH /console/templates/:id`.
+            Create/edit now writes to the backend template store and returns the persisted version immediately.
           </AlertDescription>
         </Alert>
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-surface-sunken/40 px-3 py-2 text-xs text-muted-foreground">
@@ -189,6 +190,10 @@ export default function Templates() {
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="p-2">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+              <span>Templates</span>
+              <HelpTip label="Template list help" content="Each row shows a versioned template draft or active template for the current workspace scope." />
+            </div>
             {templates.length === 0 ? (
               <EmptyState className="my-2" title="No records returned" description="The backend returned no prompt templates." />
             ) : (
@@ -220,10 +225,10 @@ export default function Templates() {
             {selected ? (
               <>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">
-                      {selected.name} <span className="font-mono text-sm text-muted-foreground">v{selected.version}</span>
-                    </h3>
+                <div>
+                  <h3 className="font-semibold">
+                    {selected.name} <span className="font-mono text-sm text-muted-foreground">v{selected.version}</span>
+                  </h3>
                     <div className="flex flex-wrap gap-2 mt-1">
                       <ScopeBadge value={selected.scope} />
                       <StatusBadge value={selected.prompt_type} tone="neutral" />
@@ -232,6 +237,9 @@ export default function Templates() {
                           ? projectNameById.get(selected.project_id ?? "") ?? selected.project_id ?? "Unassigned project"
                           : "Global"}
                       </span>
+                    </div>
+                    <div className="mt-2">
+                      <HelpTip label="Template details help" content="This panel shows the selected template body, its activation state, and the workspace scope it applies to." />
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -272,6 +280,7 @@ export default function Templates() {
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold">LLM assistant</h3>
+              <HelpTip label="LLM assistant help" content="Ask the backend assistant to draft or explain template text in the context of the current template." />
               <CollapsibleTrigger asChild>
                 <Button size="sm" variant="outline">
                   Collapse
@@ -295,20 +304,23 @@ export default function Templates() {
           <SheetContent className="w-full overflow-auto sm:max-w-3xl">
             <SheetHeader>
               <SheetTitle>{draft.id ? "Edit template" : "New template"}</SheetTitle>
-              <SheetDescription>Draft saves update the local template list immediately. The backend write contract is still missing.</SheetDescription>
+              <SheetDescription>Draft saves write to the backend template store and then refresh the template list.</SheetDescription>
             </SheetHeader>
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="template-name">Name</Label>
+                  <HelpTip label="Template name help" content="Human-readable template name shown in the list and editor." />
                   <Input id="template-name" value={draft.name} onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="template-type">Prompt type</Label>
+                  <HelpTip label="Template prompt type help" content="Prompt family or generation type this template belongs to." />
                   <Input id="template-type" value={draft.prompt_type} onChange={(e) => setDraft((prev) => ({ ...prev, prompt_type: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
                   <Label>Scope</Label>
+                  <HelpTip label="Template scope help" content="Scope controls whether the template is global, user-specific, or project-specific." />
                   <Select
                     value={draft.scope}
                     onValueChange={(value) => setDraft((prev) => ({ ...prev, scope: value as PfScope, project_id: value === "project" ? prev.project_id || projectId || "" : "" }))}
@@ -325,6 +337,7 @@ export default function Templates() {
                 </div>
                 <div className="space-y-2">
                   <Label>Project</Label>
+                  <HelpTip label="Template project help" content="Only needed when scope is project." />
                   <Select
                     value={draft.project_id || "none"}
                     onValueChange={(value) => setDraft((prev) => ({ ...prev, project_id: value === "none" ? "" : value }))}
@@ -345,10 +358,12 @@ export default function Templates() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="template-family">Family key</Label>
+                  <HelpTip label="Family key help" content="Groups versions that belong to the same template family for activation and replacement." />
                   <Input id="template-family" value={draft.template_family_key} onChange={(e) => setDraft((prev) => ({ ...prev, template_family_key: e.target.value }))} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="template-version">Version</Label>
+                  <HelpTip label="Template version help" content="Version number within the template family. Higher versions usually supersede older ones." />
                   <Input
                     id="template-version"
                     type="number"
@@ -360,6 +375,7 @@ export default function Templates() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="template-body">Body</Label>
+                <HelpTip label="Template body help" content="Markdown body for the template. Keep placeholders and instructions explicit." />
                 <Textarea
                   id="template-body"
                   value={draft.body}

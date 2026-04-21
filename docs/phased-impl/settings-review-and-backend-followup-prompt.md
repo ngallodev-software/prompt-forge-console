@@ -35,7 +35,7 @@ Implementation requirements
 - Local console preferences
 - Runtime configuration values
 - Backend-managed secrets or infrastructure values
-- Query catalog and admin actions
+- Query catalog docs and admin actions
 - Do not mix fake env text with editable inputs.
 
 3. Persist frontend-only settings

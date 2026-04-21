@@ -9,6 +9,7 @@ import { MetricCard } from "@/components/pf/MetricCard";
 import { NeedsAttentionPanel } from "@/components/pf/NeedsAttentionPanel";
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { StatusBadge } from "@/components/pf/StatusBadge";
+import { HelpTip } from "@/components/pf/HelpTip";
 import { Activity, Inbox, Send, AlertTriangle, Layers, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
@@ -34,45 +35,59 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader title="Operations dashboard" description="Live health, throughput, and recovery queues across PromptForge." />
+      <PageHeader
+        title="Operations dashboard"
+        description="Live health, throughput, and recovery queues across PromptForge."
+        help={{
+          label: "Dashboard help",
+          content: "Start here for live system state. Health cards show backend reachability, metric cards show counts, and attention queues surface items that need action.",
+        }}
+      />
       <PageBody>
         <QueryInspector />
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-          <HealthCard title="API" status={health?.api.status ?? "ok"} metric={health ? `${health.api.latency_ms}ms` : "—"} hint="last probe" />
-          <HealthCard title="Database" status={health?.db.status ?? "ok"} metric={health ? `${health.db.latency_ms}ms` : "—"} hint="proxy probe" />
-          <MetricCard label="Queue depth" value={totalQueue} Icon={Layers} hint={`${queueDepth?.length ?? 0} groups`} />
-          <MetricCard label="Failures 24h" value={health?.failures_24h ?? 0} Icon={AlertTriangle} hint="processing + delivery" />
+          <HealthCard title="API" status={health?.api.status ?? "ok"} metric={health ? `${health.api.latency_ms}ms` : "—"} hint="last probe" help={{ label: "API health", content: "Live API reachability and latency for console requests." }} />
+          <HealthCard title="Database" status={health?.db.status ?? "ok"} metric={health ? `${health.db.latency_ms}ms` : "—"} hint="proxy probe" help={{ label: "Database health", content: "Backend database probe used to judge storage reachability and query health." }} />
+          <MetricCard label="Queue depth" value={totalQueue} Icon={Layers} hint={`${queueDepth?.length ?? 0} groups`} help={{ label: "Queue depth", content: "Queued and dispatching deliveries grouped by priority and destination." }} />
+          <MetricCard label="Failures 24h" value={health?.failures_24h ?? 0} Icon={AlertTriangle} hint="processing + delivery" help={{ label: "Failure count", content: "Processing and delivery failures recorded in the last 24 hours." }} />
         </div>
 
         <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Avg E2E latency" value={`${avgLatency}s`} Icon={Clock} hint="recent terminal deliveries" />
-          <MetricCard label="Notes" value={totalNotes} Icon={Inbox} />
-          <MetricCard label="Prompts" value={totalPrompts} Icon={Activity} />
-          <MetricCard label="Deliveries" value={totalDeliveries} Icon={Send} />
+          <MetricCard label="Avg E2E latency" value={`${avgLatency}s`} Icon={Clock} hint="recent terminal deliveries" help={{ label: "Latency metric", content: "Average note-to-terminal-delivery latency from recent completed deliveries." }} />
+          <MetricCard label="Notes" value={totalNotes} Icon={Inbox} help={{ label: "Note count", content: "Total intake notes across current projects in the loaded snapshot." }} />
+          <MetricCard label="Prompts" value={totalPrompts} Icon={Activity} help={{ label: "Prompt count", content: "Prompt generations created from imported intake notes." }} />
+          <MetricCard label="Deliveries" value={totalDeliveries} Icon={Send} help={{ label: "Delivery count", content: "Downstream dispatch attempts, including completed and failed deliveries." }} />
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
           <NeedsAttentionPanel
             title="Requires review"
+            help={{ label: "Review queue", content: "Prompt generations that still need operator or admin attention before they can be treated as done." }}
             items={(review?.rows ?? []).map(p => ({ id: p.id, title: p.prompt_type, subtitle: p.id, to: `/pipeline/${p.intake_note_id}`, meta: <StatusBadge value={p.status} /> }))}
           />
           <NeedsAttentionPanel
             title="Failed deliveries"
+            help={{ label: "Delivery failures", content: "Dispatch attempts that failed and may need retry, reroute, or target inspection." }}
             items={(failedDel?.rows ?? []).map(d => ({ id: d.id, title: `→ ${d.destination}`, subtitle: d.id, to: `/deliveries`, meta: <StatusBadge value="failed" /> }))}
           />
           <NeedsAttentionPanel
             title="Failed processing"
+            help={{ label: "Processing failures", content: "Pipeline stages that stopped before completion and need trace inspection." }}
             items={(failedRuns ?? []).slice(0, 5).map(r => ({ id: r.id, title: r.stage_name, subtitle: r.error_text ?? "", to: `/pipeline/${r.intake_note_id}`, meta: <StatusBadge value="failed" /> }))}
           />
           <NeedsAttentionPanel
             title="Stuck notes"
+            help={{ label: "Stuck notes", content: "Intake notes stuck in error state without normal progression through the pipeline." }}
             items={(stuck?.rows ?? []).map(n => ({ id: n.id, title: n.note_relative_path.split("/").pop()!, subtitle: n.note_relative_path, to: `/intake/${n.id}`, meta: <StatusBadge value={n.status} /> }))}
           />
         </div>
 
         <Card className="p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold">Project throughput</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold">Project throughput</h3>
+              <HelpTip label="Project throughput help" content="Rollup of notes, prompts, and deliveries by project. Use this to spot hot projects or failing paths." />
+            </div>
             <Link to="/intake" className="text-xs text-primary hover:underline">View intake →</Link>
           </div>
           <div className="overflow-auto">
