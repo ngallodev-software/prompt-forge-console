@@ -108,10 +108,21 @@ export default function Settings() {
   } = useAppStore();
   const settingsScope: PfScope = workspace.scope;
   const settingsProjectId = workspace.scope === "project" ? workspace.projectId ?? null : null;
-  const { data: projects = [] } = useQuery({ queryKey: qk.projects, queryFn: listProjects });
-  const { data: backendSettings } = useQuery({
+  const {
+    data: projects = [],
+    error: projectsError,
+  } = useQuery({
+    queryKey: qk.projects,
+    queryFn: listProjects,
+    throwOnError: false,
+  });
+  const {
+    data: backendSettings,
+    error: backendSettingsError,
+  } = useQuery({
     queryKey: qk.settings(settingsScope, settingsProjectId),
     queryFn: () => getConsoleSettings(settingsScope, settingsProjectId),
+    throwOnError: false,
   });
   const hasProjects = projects.length > 0;
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft | null>(null);
@@ -128,6 +139,7 @@ export default function Settings() {
     queryKey: qk.kanbanWorkspaces(kanbanDiscoveryBaseUrl),
     queryFn: () => discoverKanbanWorkspaces(kanbanDiscoveryBaseUrl),
     enabled: kanbanDiscoveryBaseUrl.length > 0,
+    throwOnError: false,
   });
 
   useEffect(() => {
@@ -364,7 +376,11 @@ export default function Settings() {
                   <ErrorState
                     className="mt-3"
                     title="No projects returned"
-                    message="The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
+                    message={
+                      projectsError instanceof Error
+                        ? projectsError.message
+                        : "The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
+                    }
                   />
                 )}
               </div>
@@ -463,6 +479,12 @@ export default function Settings() {
               These values persist through the backend. The form below is scoped to the current workspace and saves only the supported server-owned keys.
             </p>
           </div>
+          {backendSettingsError instanceof Error && (
+            <ErrorState
+              title="Backend runtime settings unavailable"
+              message={backendSettingsError.message}
+            />
+          )}
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5 md:col-span-2">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Scope</Label>
@@ -489,6 +511,9 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, webhookUrl: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">
+                Blank inherits the backend default webhook instead of storing an empty override.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">LLM mode</Label>
@@ -563,6 +588,9 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanBaseUrl: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">
+                If Prompt Forge runs in Docker and Kanban runs on the host, prefer <span className="font-mono">http://host.docker.internal:3484</span> over <span className="font-mono">http://127.0.0.1:3484</span>.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban workspace ID</Label>

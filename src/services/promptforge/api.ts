@@ -137,6 +137,25 @@ function buildQueryPath(path: string, params: Record<string, unknown>): string {
   return qs ? `${path}?${qs}` : path;
 }
 
+function humanizeKanbanError(error: unknown): Error {
+  const detail = error instanceof Error ? error.message : "Unknown Kanban error";
+  if (detail.includes("kanban_binding_invalid")) {
+    return new Error("Kanban base URL and workspace ID are required before using the Kanban harness.");
+  }
+  if (detail.includes("kanban_transport_error:ConnectError")) {
+    return new Error(
+      "Prompt Forge could not reach Kanban. Check the Kanban base URL, confirm Kanban is running, and use http://host.docker.internal:3484 when Prompt Forge runs in Docker against a host Kanban.",
+    );
+  }
+  if (detail.includes("kanban_http_error:")) {
+    return new Error(`Kanban returned an HTTP error. ${detail}`);
+  }
+  if (detail.includes("kanban_response_invalid")) {
+    return new Error("Kanban responded with an unexpected payload.");
+  }
+  return error instanceof Error ? error : new Error(detail);
+}
+
 interface BackendPaginatedResponse<T> {
   pagination: { total: number; limit: number; offset: number; has_more: boolean };
   [key: string]: unknown;
@@ -1028,7 +1047,7 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
         codexReasoningEffort: "medium",
         openaiBaseUrl: "https://api.openai.com/v1",
         anthropicBaseUrl: "https://api.anthropic.com",
-        kanbanBaseUrl: "http://127.0.0.1:3000",
+        kanbanBaseUrl: "http://127.0.0.1:3484",
         kanbanWorkspaceId: "",
       },
       secrets: {},
@@ -1266,7 +1285,7 @@ function buildMockPromptKanbanPreview(id: string): PromptKanbanPreview {
     promptGenerationId: id,
     projectId: null,
     sourceStatus: prompt?.status ?? "created",
-    kanbanBaseUrl: "http://127.0.0.1:3000",
+    kanbanBaseUrl: "http://127.0.0.1:3484",
     kanbanWorkspaceId: "",
     build,
   };
@@ -1276,8 +1295,9 @@ export async function previewPromptKanbanImport(id: string): Promise<PromptKanba
   try {
     return await fetchJson<PromptKanbanPreview>(`/console/prompts/${id}/kanban/preview`);
   } catch (error) {
-    if (!shouldUseMockData()) throw error;
-    logBackendFallback("promptforge kanban preview", error);
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban preview", normalized);
     await delay(120);
     return buildMockPromptKanbanPreview(id);
   }
@@ -1287,8 +1307,9 @@ export async function applyPromptToKanban(id: string): Promise<PromptKanbanApply
   try {
     return await postJson<PromptKanbanApplyResponse>(`/console/prompts/${id}/kanban/apply`);
   } catch (error) {
-    if (!shouldUseMockData()) throw error;
-    logBackendFallback("promptforge kanban apply", error);
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban apply", normalized);
     await delay(160);
     const preview = buildMockPromptKanbanPreview(id);
     return {
@@ -1318,8 +1339,9 @@ export async function discoverKanbanWorkspaces(baseUrl: string): Promise<KanbanW
       base_url: baseUrl,
     }));
   } catch (error) {
-    if (!shouldUseMockData()) throw error;
-    logBackendFallback("promptforge kanban workspace discovery", error);
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban workspace discovery", normalized);
     await delay(120);
     return {
       currentWorkspaceId: null,

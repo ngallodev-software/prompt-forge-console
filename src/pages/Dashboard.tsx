@@ -20,9 +20,18 @@ export default function Dashboard() {
   const { data: failedDel } = useQuery({ queryKey: qk.deliveriesList({ failedOnly: true, pageSize: 5 }), queryFn: () => listDeliveries({ failedOnly: true, pageSize: 5 }) });
   const { data: failedRuns } = useQuery({ queryKey: qk.processingFailed, queryFn: listFailedProcessingRuns });
   const { data: stuck } = useQuery({ queryKey: qk.intakeList({ status: "error", pageSize: 5 }), queryFn: () => listIntakeNotes({ status: "error", pageSize: 5 }) });
+  const { data: intakeIndex } = useQuery({ queryKey: qk.intakeList({ pageSize: 500 }), queryFn: () => listIntakeNotes({ pageSize: 500 }) });
+  const { data: promptIndex } = useQuery({ queryKey: qk.promptList({ pageSize: 500 }), queryFn: () => listPromptGenerations({ pageSize: 500 }) });
   const { data: queueDepth } = useQuery({ queryKey: qk.queueDepth, queryFn: getQueueDepth });
   const { data: sla } = useQuery({ queryKey: qk.slaSummary, queryFn: getSlaSummary });
   const { data: throughput } = useQuery({ queryKey: qk.projectThroughput, queryFn: getProjectThroughput });
+  const noteById = new Map((intakeIndex?.rows ?? []).map((note) => [note.id, note]));
+  const promptById = new Map((promptIndex?.rows ?? []).map((prompt) => [prompt.id, prompt]));
+  const noteLabel = (noteId: string) => noteById.get(noteId)?.note_relative_path ?? noteId.slice(-8);
+  const promptLabel = (promptId: string) => {
+    const prompt = promptById.get(promptId);
+    return prompt ? `${prompt.prompt_type} · ${noteLabel(prompt.intake_note_id)}` : promptId.slice(-8);
+  };
 
   const totalQueue = queueDepth?.reduce((a, b) => a + b.queued_count, 0) ?? 0;
   const latencySamples = (sla ?? []).filter((s) => s.latency_ms !== null && s.latency_ms !== undefined);
@@ -63,17 +72,35 @@ export default function Dashboard() {
           <NeedsAttentionPanel
             title="Requires review"
             help={{ label: "Review queue", content: "Prompt generations that still need operator or admin attention before they can be treated as done." }}
-            items={(review?.rows ?? []).map(p => ({ id: p.id, title: p.prompt_type, subtitle: p.id, to: `/pipeline/${p.intake_note_id}`, meta: <StatusBadge value={p.status} /> }))}
+            items={(review?.rows ?? []).map(p => ({
+              id: p.id,
+              title: `${p.prompt_type} · ${noteLabel(p.intake_note_id)}`,
+              subtitle: "Prompt generation awaiting operator review",
+              to: `/pipeline/${p.intake_note_id}`,
+              meta: <StatusBadge value={p.status} />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Failed deliveries"
             help={{ label: "Delivery failures", content: "Dispatch attempts that failed and may need retry, reroute, or target inspection." }}
-            items={(failedDel?.rows ?? []).map(d => ({ id: d.id, title: `→ ${d.destination}`, subtitle: d.id, to: `/deliveries`, meta: <StatusBadge value="failed" /> }))}
+            items={(failedDel?.rows ?? []).map(d => ({
+              id: d.id,
+              title: `${d.destination} · ${promptLabel(d.prompt_generation_id)}`,
+              subtitle: d.failure_text ?? "Failed dispatch",
+              to: `/deliveries`,
+              meta: <StatusBadge value="failed" />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Failed processing"
             help={{ label: "Processing failures", content: "Pipeline stages that stopped before completion and need trace inspection." }}
-            items={(failedRuns ?? []).slice(0, 5).map(r => ({ id: r.id, title: r.stage_name, subtitle: r.error_text ?? "", to: `/pipeline/${r.intake_note_id}`, meta: <StatusBadge value="failed" /> }))}
+            items={(failedRuns ?? []).slice(0, 5).map(r => ({
+              id: r.id,
+              title: `${r.stage_name} · ${noteLabel(r.intake_note_id)}`,
+              subtitle: r.error_text ?? "Run stopped early",
+              to: `/pipeline/${r.intake_note_id}`,
+              meta: <StatusBadge value="failed" />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Stuck notes"
