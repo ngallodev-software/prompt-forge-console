@@ -38,6 +38,8 @@
   - `kanbanWorkspaceId`
 - extended Settings page runtime draft hydration and save path to include both Kanban binding fields
 - added Settings page inputs for both backend-managed Kanban binding fields
+- added discovery-backed Kanban workspace dropdown in Settings
+- added refresh path for live workspace discovery from current Kanban base URL
 - added Prompt sheet Kanban actions:
   - preview backend-owned Kanban manifest
   - apply prompt generation into Kanban
@@ -57,3 +59,5 @@
 
 - no richer UI reconciliation view yet beyond JSON result display
 - no multi-task chain UI yet
+- no create-workspace UI yet
+- no explicit “Kanban down / unreachable” recovery card yet

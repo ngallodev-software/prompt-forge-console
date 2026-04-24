@@ -128,3 +128,47 @@ Recommended v1 entry:
 - top-level Kanban management console
 - general external integrations marketplace
 - real-time Kanban board embedding
+
+## Next Phase: UX Hardening
+
+### T-09 Add Kanban availability state
+
+- model: `gpt-5.4-mini low`
+- goal: replace raw preview/apply failures with clear status
+- UI states:
+  - Kanban unavailable
+  - Kanban reachable, no workspace selected
+  - Kanban reachable, workspace selected
+
+### T-10 Add workspace picker
+
+- model: `gpt-5.4-mini medium`
+- goal: replace manual workspace id entry with discovery-backed selection
+- backend dependency:
+  - Prompt Forge discovery route backed by Kanban `projects.list`
+- UI scope:
+  - fetch workspace list for current `kanbanBaseUrl`
+  - let operator select one
+  - persist selected workspace id into Prompt Forge runtime settings
+
+### T-11 Add create-workspace flow
+
+- model: `gpt-5.4-medium`
+- goal: let operator create a new Kanban workspace from the console
+- backend dependency:
+  - Prompt Forge create-workspace route backed by Kanban `projects.add`
+- UI scope:
+  - explicit modal/form
+  - path/git-url input
+  - write back returned `workspaceId`
+
+### T-12 Add recovery/help surface when Kanban is down
+
+- model: `gpt-5.4-mini low`
+- goal: guide operator instead of failing with transport errors
+- UI scope:
+  - show configured Kanban base URL
+  - show local source-path hint if configured
+  - show exact command or instructions to start local Kanban
+- non-goal:
+  - no hidden browser-side process spawning

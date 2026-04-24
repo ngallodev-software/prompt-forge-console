@@ -354,6 +354,25 @@ export interface PromptKanbanApplyResponse {
   preflightErrors: KanbanManifestPreflightError[];
 }
 
+export interface KanbanWorkspaceTaskCounts {
+  backlog: number;
+  inProgress: number;
+  review: number;
+  trash: number;
+}
+
+export interface KanbanWorkspaceRecord {
+  workspaceId: string;
+  name: string;
+  path: string;
+  taskCounts: KanbanWorkspaceTaskCounts;
+}
+
+export interface KanbanWorkspaceDiscoveryResponse {
+  currentWorkspaceId: string | null;
+  workspaces: KanbanWorkspaceRecord[];
+}
+
 export interface PageParams {
   page?: number;
   pageSize?: number;

@@ -5,9 +5,11 @@ import { HealthCard } from "@/components/pf/HealthCard";
 import { HelpTip } from "@/components/pf/HelpTip";
 import { Card } from "@/components/ui/card";
 import { QueryInspector } from "@/components/pf/QueryInspector";
+import { useAppStore } from "@/stores/app-store";
 
 export default function Health() {
-  const { data } = useQuery({ queryKey: qk.health, queryFn: getHealth, refetchInterval: 10000 });
+  const polling = useAppStore((s) => s.pollingMs);
+  const { data } = useQuery({ queryKey: qk.health, queryFn: getHealth, refetchInterval: polling });
   const { data: llm } = useQuery({ queryKey: qk.llmRunsAgg, queryFn: getLlmRunAggregate });
 
   return (

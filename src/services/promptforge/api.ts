@@ -25,6 +25,7 @@ import type {
   HealthSnapshot,
   BackendConsoleSettingsResponse,
   BackendConsoleRuntimeSettingsPatch,
+  KanbanWorkspaceDiscoveryResponse,
   IntakeNote,
   LlmRun,
   LogEntry,
@@ -58,6 +59,15 @@ const ENV_API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | unde
 const ENV_BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || defaultConsoleSettings.bootstrapPath;
 export const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
 
+function getPollingMs(): number {
+  return useAppStore.getState().pollingMs;
+}
+
+function getHydrationTtlMs(): number {
+  const configured = getPollingMs();
+  return Number.isFinite(configured) && configured > 0 ? configured : HYDRATION_TTL_MS;
+}
+
 function getApiBase(): string {
   return useAppStore.getState().consoleSettings.apiBaseUrl.trim().replace(/\/+$/, "") || ENV_API_BASE;
 }
@@ -72,7 +82,7 @@ export function getConsoleRuntimeSnapshot() {
     bootstrapPath: getBootstrapPath(),
     defaultApiBaseUrl: ENV_API_BASE,
     defaultBootstrapPath: ENV_BOOTSTRAP_PATH,
-    hydrationTtlMs: HYDRATION_TTL_MS,
+    hydrationTtlMs: getHydrationTtlMs(),
     strictBackend: STRICT_BACKEND,
     mockDataEnabled: shouldUseMockData(),
   };
@@ -155,7 +165,7 @@ async function fetchPageResult<T>(path: string, itemsKey: string, pageSize: numb
 }
 
 async function ensureHydrated(force = false): Promise<void> {
-  const stale = Date.now() - lastHydrationAt > HYDRATION_TTL_MS;
+  const stale = Date.now() - lastHydrationAt > getHydrationTtlMs();
   if (!force && !stale && lastHydrationAt > 0) return;
   if (hydrationInFlight) return hydrationInFlight;
 
@@ -225,6 +235,7 @@ export const qk = {
   templates: (params: unknown) => ["pf", "templates", "list", params] as const,
   targets: (type?: PfTargetType) => ["pf", "targets", type] as const,
   targetHealth: (id: string) => ["pf", "targets", "health", id] as const,
+  kanbanWorkspaces: (baseUrl: string) => ["pf", "kanban", "workspaces", baseUrl] as const,
   settings: (scope?: PfScope, projectId?: string | null) => ["pf", "settings", scope ?? "global", projectId ?? null] as const,
   logsList: (params: unknown) => ["pf", "logs", "list", params] as const,
   errorFingerprints: ["pf", "logs", "fingerprints"] as const,
@@ -1297,6 +1308,22 @@ export async function applyPromptToKanban(id: string): Promise<PromptKanbanApply
           }
         : null,
       preflightErrors: preview.build.errors,
+    };
+  }
+}
+
+export async function discoverKanbanWorkspaces(baseUrl: string): Promise<KanbanWorkspaceDiscoveryResponse> {
+  try {
+    return await fetchJson<KanbanWorkspaceDiscoveryResponse>(buildQueryPath("/console/kanban/workspaces", {
+      base_url: baseUrl,
+    }));
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge kanban workspace discovery", error);
+    await delay(120);
+    return {
+      currentWorkspaceId: null,
+      workspaces: [],
     };
   }
 }

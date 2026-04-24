@@ -14,7 +14,7 @@ import { ErrorState } from "@/components/pf/ErrorState";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { HelpTip } from "@/components/pf/HelpTip";
-import { getConsoleRuntimeSnapshot, getConsoleSettings, listProjects, patchConsoleRuntimeSettings, patchConsoleSecretSettings, purgeArchivedNotes, qk } from "@/services/promptforge";
+import { discoverKanbanWorkspaces, getConsoleRuntimeSnapshot, getConsoleSettings, listProjects, patchConsoleRuntimeSettings, patchConsoleSecretSettings, purgeArchivedNotes, qk } from "@/services/promptforge";
 import { RUNTIME_ENVIRONMENT } from "@/services/promptforge/config";
 import { type Theme, useAppStore } from "@/stores/app-store";
 import type { Role } from "@/services/promptforge/types";
@@ -118,6 +118,17 @@ export default function Settings() {
   const [secretDraft, setSecretDraft] = useState<SecretDraft>({});
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [secretBusy, setSecretBusy] = useState(false);
+  const kanbanDiscoveryBaseUrl = runtimeDraft?.kanbanBaseUrl.trim() ?? "";
+  const {
+    data: discoveredKanbanWorkspaces,
+    error: kanbanWorkspaceError,
+    isFetching: isDiscoveringKanbanWorkspaces,
+    refetch: refetchKanbanWorkspaces,
+  } = useQuery({
+    queryKey: qk.kanbanWorkspaces(kanbanDiscoveryBaseUrl),
+    queryFn: () => discoverKanbanWorkspaces(kanbanDiscoveryBaseUrl),
+    enabled: kanbanDiscoveryBaseUrl.length > 0,
+  });
 
   useEffect(() => {
     if (!backendSettings) return;
@@ -561,6 +572,59 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discovered Kanban workspaces</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!kanbanDiscoveryBaseUrl || isDiscoveringKanbanWorkspaces}
+                  onClick={() => void refetchKanbanWorkspaces()}
+                >
+                  {isDiscoveringKanbanWorkspaces ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+              <Select
+                value={runtimeDraft?.kanbanWorkspaceId ?? ""}
+                onValueChange={(value) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: value } : cur))}
+                disabled={!runtimeDraft || !canEditRuntime || (discoveredKanbanWorkspaces?.workspaces.length ?? 0) === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={kanbanDiscoveryBaseUrl ? "Select discovered workspace" : "Enter Kanban base URL first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(discoveredKanbanWorkspaces?.workspaces ?? []).map((workspace) => (
+                    <SelectItem key={workspace.workspaceId} value={workspace.workspaceId}>
+                      {workspace.name} · {workspace.workspaceId.slice(-8)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {kanbanWorkspaceError ? (
+                <p className="text-xs text-destructive">
+                  {kanbanWorkspaceError instanceof Error ? kanbanWorkspaceError.message : "Unable to discover Kanban workspaces."}
+                </p>
+              ) : kanbanDiscoveryBaseUrl && isDiscoveringKanbanWorkspaces ? (
+                <p className="text-xs text-muted-foreground">Checking Kanban availability…</p>
+              ) : discoveredKanbanWorkspaces && discoveredKanbanWorkspaces.workspaces.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Kanban reachable. No workspaces found for the current base URL.</p>
+              ) : discoveredKanbanWorkspaces ? (
+                <div className="grid gap-2 text-xs text-muted-foreground">
+                  <div>
+                    Kanban status: <span className="font-mono">reachable</span>
+                  </div>
+                  <div>
+                    Current Kanban workspace: <span className="font-mono">{discoveredKanbanWorkspaces.currentWorkspaceId ?? "none"}</span>
+                  </div>
+                  <div>
+                    {discoveredKanbanWorkspaces.workspaces.length} workspace(s) discovered.
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Discovery runs against the current Kanban base URL.</p>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between gap-3">
