@@ -24,6 +24,7 @@ import type {
   DeliveryTarget,
   HealthSnapshot,
   BackendConsoleSettingsResponse,
+  BackendConsoleRuntimeSettingsPatch,
   IntakeNote,
   LlmRun,
   LogEntry,
@@ -31,6 +32,8 @@ import type {
   PageResult,
   ProcessingRun,
   Project,
+  PromptKanbanApplyResponse,
+  PromptKanbanPreview,
   PromptGeneration,
   PromptTemplate,
   Rule,
@@ -1014,6 +1017,8 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
         codexReasoningEffort: "medium",
         openaiBaseUrl: "https://api.openai.com/v1",
         anthropicBaseUrl: "https://api.anthropic.com",
+        kanbanBaseUrl: "http://127.0.0.1:3000",
+        kanbanWorkspaceId: "",
       },
       secrets: {},
       permissions: {
@@ -1026,7 +1031,7 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
   }
 }
 
-export async function patchConsoleRuntimeSettings(runtime: Record<string, unknown>, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
+export async function patchConsoleRuntimeSettings(runtime: BackendConsoleRuntimeSettingsPatch, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
   try {
     return await postJson<BackendConsoleSettingsResponse>("/console/settings/runtime", {
       scope: scope ?? "global",
@@ -1227,6 +1232,75 @@ export async function changePromptPriority(id: string, priority: string) {
   await delay(140);
   return { ok: true, id, priority };
 }
+
+function buildMockPromptKanbanPreview(id: string): PromptKanbanPreview {
+  const prompt = promptGenerations.find((row) => row.id === id);
+  const promptText = prompt?.final_prompt_markdown.trim() ?? "";
+  const build = prompt && promptText
+    ? {
+        ok: true,
+        manifest: {
+          version: "v1" as const,
+          tasks: [{ externalTaskKey: `pf:pg:${id}`, prompt: promptText }],
+          links: [],
+        },
+        errors: [],
+      }
+    : {
+        ok: false,
+        manifest: null,
+        errors: [{ code: "kanban_manifest_missing_prompt", message: "Prompt generation does not have final_prompt_markdown content." }],
+      };
+  return {
+    promptGenerationId: id,
+    projectId: null,
+    sourceStatus: prompt?.status ?? "created",
+    kanbanBaseUrl: "http://127.0.0.1:3000",
+    kanbanWorkspaceId: "",
+    build,
+  };
+}
+
+export async function previewPromptKanbanImport(id: string): Promise<PromptKanbanPreview> {
+  try {
+    return await fetchJson<PromptKanbanPreview>(`/console/prompts/${id}/kanban/preview`);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge kanban preview", error);
+    await delay(120);
+    return buildMockPromptKanbanPreview(id);
+  }
+}
+
+export async function applyPromptToKanban(id: string): Promise<PromptKanbanApplyResponse> {
+  try {
+    return await postJson<PromptKanbanApplyResponse>(`/console/prompts/${id}/kanban/apply`);
+  } catch (error) {
+    if (!shouldUseMockData()) throw error;
+    logBackendFallback("promptforge kanban apply", error);
+    await delay(160);
+    const preview = buildMockPromptKanbanPreview(id);
+    return {
+      promptGenerationId: preview.promptGenerationId,
+      projectId: preview.projectId,
+      kanbanBaseUrl: preview.kanbanBaseUrl,
+      kanbanWorkspaceId: preview.kanbanWorkspaceId,
+      manifest: preview.build.manifest,
+      result: preview.build.ok && preview.build.manifest
+        ? {
+            version: "v1",
+            ok: true,
+            applied: true,
+            taskMappings: [{ externalTaskKey: `pf:pg:${id}`, taskId: "mock-task-1", columnId: "backlog", created: true }],
+            linkResults: [],
+            startResults: [],
+          }
+        : null,
+      preflightErrors: preview.build.errors,
+    };
+  }
+}
+
 export async function archiveNote(id: string) {
   try {
     const response = await postJson<{ ok?: boolean }>(`/console/intake/${id}/archive`, {}, "PATCH");

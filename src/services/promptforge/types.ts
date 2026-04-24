@@ -253,7 +253,11 @@ export interface BackendConsoleRuntimeSettings {
   codexReasoningEffort: string;
   openaiBaseUrl: string;
   anthropicBaseUrl: string;
+  kanbanBaseUrl: string;
+  kanbanWorkspaceId: string;
 }
+
+export type BackendConsoleRuntimeSettingsPatch = Partial<BackendConsoleRuntimeSettings>;
 
 export interface BackendConsoleSettingsResponse {
   scope: PfScope;
@@ -266,6 +270,88 @@ export interface BackendConsoleSettingsResponse {
     can_purge_archived_notes: boolean;
   };
   updated_at: string;
+}
+
+export interface KanbanManifestPreflightError {
+  code: string;
+  message: string;
+  field?: string | null;
+}
+
+export interface KanbanImportTask {
+  externalTaskKey: string;
+  prompt: string;
+  title?: string;
+}
+
+export interface KanbanImportManifest {
+  version: "v1";
+  tasks: KanbanImportTask[];
+  links: Array<Record<string, unknown>>;
+  startTaskExternalKeys?: string[];
+}
+
+export interface KanbanImportTaskMapping {
+  externalTaskKey: string;
+  taskId: string;
+  columnId: string;
+  created: boolean;
+}
+
+export interface KanbanImportLinkResult {
+  fromExternalTaskKey: string;
+  toExternalTaskKey: string;
+  dependencyId: string;
+  created: boolean;
+}
+
+export interface KanbanImportStartResult {
+  externalTaskKey: string;
+  taskId: string;
+  ok: boolean;
+  summary?: Record<string, unknown> | null;
+  error?: string;
+}
+
+export interface KanbanImportError {
+  code: string;
+  message: string;
+  externalTaskKey?: string;
+  fromExternalTaskKey?: string;
+  toExternalTaskKey?: string;
+}
+
+export interface KanbanImportResponse {
+  version: "v1";
+  ok: boolean;
+  applied: boolean;
+  taskMappings: KanbanImportTaskMapping[];
+  linkResults: KanbanImportLinkResult[];
+  startResults: KanbanImportStartResult[];
+  error?: KanbanImportError | null;
+}
+
+export interface PromptKanbanPreview {
+  promptGenerationId: string;
+  projectId: string | null;
+  sourceStatus: PfPromptGenerationStatus;
+  kanbanBaseUrl: string | null;
+  kanbanWorkspaceId: string | null;
+  build: {
+    ok: boolean;
+    manifest: KanbanImportManifest | null;
+    errors: KanbanManifestPreflightError[];
+  };
+}
+
+export interface PromptKanbanApplyResponse {
+  promptGenerationId: string;
+  projectId: string | null;
+  kanbanBaseUrl: string | null;
+  kanbanWorkspaceId: string | null;
+  manifest: KanbanImportManifest | null;
+  result: KanbanImportResponse | null;
+  preflightErrors: KanbanManifestPreflightError[];
 }
 
 export interface PageParams {

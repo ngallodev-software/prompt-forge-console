@@ -57,6 +57,8 @@ type RuntimeDraft = {
   codexReasoningEffort: (typeof CODEX_REASONING_OPTIONS)[number];
   openaiBaseUrl: string;
   anthropicBaseUrl: string;
+  kanbanBaseUrl: string;
+  kanbanWorkspaceId: string;
 };
 
 type SecretDraft = Record<string, string>;
@@ -127,6 +129,8 @@ export default function Settings() {
       codexReasoningEffort: backendSettings.runtime.codexReasoningEffort as RuntimeDraft["codexReasoningEffort"],
       openaiBaseUrl: backendSettings.runtime.openaiBaseUrl,
       anthropicBaseUrl: backendSettings.runtime.anthropicBaseUrl,
+      kanbanBaseUrl: backendSettings.runtime.kanbanBaseUrl,
+      kanbanWorkspaceId: backendSettings.runtime.kanbanWorkspaceId,
     });
     setSecretDraft({});
   }, [backendSettings]);
@@ -147,6 +151,8 @@ export default function Settings() {
           codexReasoningEffort: runtimeDraft.codexReasoningEffort,
           openaiBaseUrl: runtimeDraft.openaiBaseUrl,
           anthropicBaseUrl: runtimeDraft.anthropicBaseUrl,
+          kanbanBaseUrl: runtimeDraft.kanbanBaseUrl,
+          kanbanWorkspaceId: runtimeDraft.kanbanWorkspaceId,
         },
         settingsScope,
         settingsProjectId,
@@ -535,6 +541,24 @@ export default function Settings() {
                 value={runtimeDraft?.anthropicBaseUrl ?? ""}
                 disabled={!runtimeDraft || !canEditRuntime}
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, anthropicBaseUrl: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban base URL</Label>
+              <Input
+                value={runtimeDraft?.kanbanBaseUrl ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanBaseUrl: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban workspace ID</Label>
+              <Input
+                value={runtimeDraft?.kanbanWorkspaceId ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
             </div>

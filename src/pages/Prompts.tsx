@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { changePromptPriority, clonePrompt, forceReview, listIntakeNotes, listPromptGenerations, qk } from "@/services/promptforge";
+import { applyPromptToKanban, changePromptPriority, clonePrompt, forceReview, listIntakeNotes, listPromptGenerations, previewPromptKanbanImport, qk } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { DataTable, type Column } from "@/components/pf/DataTable";
 import { HelpTip } from "@/components/pf/HelpTip";
@@ -18,9 +18,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import type { PromptGeneration } from "@/services/promptforge/types";
+import type { PromptGeneration, PromptKanbanApplyResponse, PromptKanbanPreview } from "@/services/promptforge/types";
 import { Link } from "react-router-dom";
-import { ArchiveRestore, Copy, FlagTriangleRight } from "lucide-react";
+import { ArchiveRestore, Copy, FlagTriangleRight, Rocket } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 const priorityOptions = ["low", "normal", "high", "urgent"] as const;
@@ -30,6 +30,9 @@ export default function Prompts() {
   const [selected, setSelected] = useState<PromptGeneration | null>(null);
   const [priorityDraft, setPriorityDraft] = useState<PromptGeneration["priority"]>("normal");
   const [actionsBusy, setActionsBusy] = useState(false);
+  const [kanbanBusy, setKanbanBusy] = useState(false);
+  const [kanbanPreview, setKanbanPreview] = useState<PromptKanbanPreview | null>(null);
+  const [kanbanApply, setKanbanApply] = useState<PromptKanbanApplyResponse | null>(null);
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: qk.promptList({ page }), queryFn: () => listPromptGenerations({ page }) });
   const { data: intakeIndex } = useQuery({ queryKey: qk.intakeList({ pageSize: 500 }), queryFn: () => listIntakeNotes({ pageSize: 500 }) });
@@ -40,6 +43,11 @@ export default function Prompts() {
   useEffect(() => {
     if (selected) setPriorityDraft(selected.priority);
   }, [selected]);
+
+  useEffect(() => {
+    setKanbanPreview(null);
+    setKanbanApply(null);
+  }, [selected?.id]);
 
   const refreshPrompts = async () => {
     await qc.invalidateQueries({ queryKey: ["pf", "prompts"] });
@@ -98,6 +106,58 @@ export default function Prompts() {
       });
     } finally {
       setActionsBusy(false);
+    }
+  };
+
+  const onPreviewKanban = async () => {
+    if (!selected) return;
+    setKanbanBusy(true);
+    try {
+      const preview = await previewPromptKanbanImport(selected.id);
+      setKanbanPreview(preview);
+      toast({
+        title: "Kanban preview ready",
+        description: preview.build.ok ? `Workspace ${preview.kanbanWorkspaceId || "unset"}` : "Preflight failed",
+      });
+    } catch (error) {
+      toast({
+        title: "Kanban preview failed",
+        description: error instanceof Error ? error.message : "Unable to build a Kanban preview.",
+      });
+    } finally {
+      setKanbanBusy(false);
+    }
+  };
+
+  const onApplyKanban = async () => {
+    if (!selected) return;
+    setKanbanBusy(true);
+    try {
+      const applied = await applyPromptToKanban(selected.id);
+      setKanbanApply(applied);
+      if (applied.result?.ok) {
+        toast({
+          title: "Prompt created in Kanban",
+          description: `${applied.result.taskMappings.length} task mapping(s) returned.`,
+        });
+      } else if (applied.preflightErrors.length > 0) {
+        toast({
+          title: "Kanban apply blocked",
+          description: applied.preflightErrors[0]?.code ?? "preflight_failed",
+        });
+      } else {
+        toast({
+          title: "Kanban apply failed",
+          description: applied.result?.error?.message ?? "Unable to create the Kanban task.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Kanban apply failed",
+        description: error instanceof Error ? error.message : "Unable to create the Kanban task.",
+      });
+    } finally {
+      setKanbanBusy(false);
     }
   };
 
@@ -201,6 +261,14 @@ export default function Prompts() {
                         confirmLabel="Clone"
                         onConfirm={onClone}
                       />
+                      <Button variant="outline" size="sm" disabled={kanbanBusy} onClick={onPreviewKanban}>
+                        <Rocket className="h-3.5 w-3.5" />
+                        Preview in Kanban
+                      </Button>
+                      <Button size="sm" disabled={kanbanBusy} onClick={onApplyKanban}>
+                        <Rocket className="h-3.5 w-3.5" />
+                        Create in Kanban
+                      </Button>
                     </div>
                     <div className="space-y-2">
                       <Label>Priority</Label>
@@ -222,6 +290,48 @@ export default function Prompts() {
                     </div>
                   </Card>
                 </PermissionGuard>
+                {(kanbanPreview || kanbanApply) && (
+                  <Card className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Rocket className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold">Kanban harness</h3>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">Kanban base URL</div>
+                        <div className="font-mono text-xs">{kanbanApply?.kanbanBaseUrl ?? kanbanPreview?.kanbanBaseUrl ?? "unset"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">Workspace ID</div>
+                        <div className="font-mono text-xs">{kanbanApply?.kanbanWorkspaceId ?? kanbanPreview?.kanbanWorkspaceId ?? "unset"}</div>
+                      </div>
+                    </div>
+                    {kanbanPreview && (
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">Preview manifest</div>
+                        {kanbanPreview.build.errors.length > 0 ? (
+                          <ul className="list-disc pl-5 text-sm text-destructive">
+                            {kanbanPreview.build.errors.map((error) => <li key={`${error.code}-${error.field ?? "none"}`}>{error.code}</li>)}
+                          </ul>
+                        ) : (
+                          <JsonViewer data={kanbanPreview.build.manifest} />
+                        )}
+                      </div>
+                    )}
+                    {kanbanApply && (
+                      <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wider text-muted-foreground">Apply result</div>
+                        {kanbanApply.preflightErrors.length > 0 ? (
+                          <ul className="list-disc pl-5 text-sm text-destructive">
+                            {kanbanApply.preflightErrors.map((error) => <li key={`${error.code}-${error.field ?? "none"}`}>{error.code}</li>)}
+                          </ul>
+                        ) : (
+                          <JsonViewer data={kanbanApply.result} />
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                )}
                 <Tabs defaultValue="render">
                   <TabsList><TabsTrigger value="render">Rendered</TabsTrigger><TabsTrigger value="structured">Structured</TabsTrigger><TabsTrigger value="lineage">Lineage</TabsTrigger></TabsList>
                   <TabsContent value="render"><MarkdownPreview source={selected.final_prompt_markdown} /></TabsContent>
