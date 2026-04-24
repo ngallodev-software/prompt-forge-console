@@ -59,6 +59,7 @@ type RuntimeDraft = {
   anthropicBaseUrl: string;
   kanbanBaseUrl: string;
   kanbanWorkspaceId: string;
+  kanbanPasscode: string;
 };
 
 type SecretDraft = Record<string, string>;
@@ -136,8 +137,8 @@ export default function Settings() {
     isFetching: isDiscoveringKanbanWorkspaces,
     refetch: refetchKanbanWorkspaces,
   } = useQuery({
-    queryKey: qk.kanbanWorkspaces(kanbanDiscoveryBaseUrl),
-    queryFn: () => discoverKanbanWorkspaces(kanbanDiscoveryBaseUrl),
+    queryKey: qk.kanbanWorkspaces(kanbanDiscoveryBaseUrl, runtimeDraft?.kanbanPasscode ?? ""),
+    queryFn: () => discoverKanbanWorkspaces(kanbanDiscoveryBaseUrl, runtimeDraft?.kanbanPasscode ?? ""),
     enabled: kanbanDiscoveryBaseUrl.length > 0,
     throwOnError: false,
   });
@@ -154,6 +155,7 @@ export default function Settings() {
       anthropicBaseUrl: backendSettings.runtime.anthropicBaseUrl,
       kanbanBaseUrl: backendSettings.runtime.kanbanBaseUrl,
       kanbanWorkspaceId: backendSettings.runtime.kanbanWorkspaceId,
+      kanbanPasscode: backendSettings.runtime.kanbanPasscode,
     });
     setSecretDraft({});
   }, [backendSettings]);
@@ -176,6 +178,7 @@ export default function Settings() {
           anthropicBaseUrl: runtimeDraft.anthropicBaseUrl,
           kanbanBaseUrl: runtimeDraft.kanbanBaseUrl,
           kanbanWorkspaceId: runtimeDraft.kanbanWorkspaceId,
+          kanbanPasscode: runtimeDraft.kanbanPasscode,
         },
         settingsScope,
         settingsProjectId,
@@ -600,6 +603,19 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban passcode</Label>
+              <Input
+                type="password"
+                value={runtimeDraft?.kanbanPasscode ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanPasscode: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required only when Kanban is bound to a remote host and shows a startup passcode. Prompt Forge uses it to verify once and reuse the returned session cookie.
+              </p>
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <div className="flex items-center justify-between gap-3">

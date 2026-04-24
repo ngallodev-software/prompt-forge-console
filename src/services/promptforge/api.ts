@@ -150,6 +150,12 @@ function humanizeKanbanError(error: unknown): Error {
   if (detail.includes("kanban_http_error:")) {
     return new Error(`Kanban returned an HTTP error. ${detail}`);
   }
+  if (detail.includes("kanban_passcode_rejected")) {
+    return new Error("Kanban rejected the configured passcode. Update the Kanban passcode in Settings and try again.");
+  }
+  if (detail.includes("kanban_http_error:401") || detail.includes("Authentication required")) {
+    return new Error("Kanban requires authentication. Enter the current Kanban passcode in Settings, then refresh workspace discovery.");
+  }
   if (detail.includes("kanban_response_invalid")) {
     return new Error("Kanban responded with an unexpected payload.");
   }
@@ -254,7 +260,7 @@ export const qk = {
   templates: (params: unknown) => ["pf", "templates", "list", params] as const,
   targets: (type?: PfTargetType) => ["pf", "targets", type] as const,
   targetHealth: (id: string) => ["pf", "targets", "health", id] as const,
-  kanbanWorkspaces: (baseUrl: string) => ["pf", "kanban", "workspaces", baseUrl] as const,
+  kanbanWorkspaces: (baseUrl: string, passcode = "") => ["pf", "kanban", "workspaces", baseUrl, passcode] as const,
   settings: (scope?: PfScope, projectId?: string | null) => ["pf", "settings", scope ?? "global", projectId ?? null] as const,
   logsList: (params: unknown) => ["pf", "logs", "list", params] as const,
   errorFingerprints: ["pf", "logs", "fingerprints"] as const,
@@ -1049,6 +1055,7 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
         anthropicBaseUrl: "https://api.anthropic.com",
         kanbanBaseUrl: "http://127.0.0.1:3484",
         kanbanWorkspaceId: "",
+        kanbanPasscode: "",
       },
       secrets: {},
       permissions: {
@@ -1287,6 +1294,7 @@ function buildMockPromptKanbanPreview(id: string): PromptKanbanPreview {
     sourceStatus: prompt?.status ?? "created",
     kanbanBaseUrl: "http://127.0.0.1:3484",
     kanbanWorkspaceId: "",
+    kanbanPasscode: "",
     build,
   };
 }
@@ -1333,10 +1341,11 @@ export async function applyPromptToKanban(id: string): Promise<PromptKanbanApply
   }
 }
 
-export async function discoverKanbanWorkspaces(baseUrl: string): Promise<KanbanWorkspaceDiscoveryResponse> {
+export async function discoverKanbanWorkspaces(baseUrl: string, passcode = ""): Promise<KanbanWorkspaceDiscoveryResponse> {
   try {
     return await fetchJson<KanbanWorkspaceDiscoveryResponse>(buildQueryPath("/console/kanban/workspaces", {
       base_url: baseUrl,
+      passcode,
     }));
   } catch (error) {
     const normalized = humanizeKanbanError(error);

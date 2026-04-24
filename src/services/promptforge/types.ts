@@ -255,6 +255,7 @@ export interface BackendConsoleRuntimeSettings {
   anthropicBaseUrl: string;
   kanbanBaseUrl: string;
   kanbanWorkspaceId: string;
+  kanbanPasscode: string;
 }
 
 export type BackendConsoleRuntimeSettingsPatch = Partial<BackendConsoleRuntimeSettings>;
