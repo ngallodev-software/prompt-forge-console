@@ -77,6 +77,76 @@
 
     /* Mono font */
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    /* === Visual Foundation === */
+    /* R1: Surface Hierarchy (dark theme default) - semantic roles: page, base, card, elevated, overlay */
+    --surface-0: hsl(220, 28%, 6%);   /* Page background - darkest */
+    --surface-1: hsl(220, 25%, 8%);   /* Base content surface */
+    --surface-2: hsl(220, 22%, 11%);  /* Card container */
+    --surface-3: hsl(220, 20%, 16%);  /* Elevated component */
+    --surface-4: hsl(220, 18%, 20%);  /* Overlay/modal - lightest */
+
+    /* R3: Typography - font families */
+    --font-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono-vf: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, "Courier New", monospace;
+
+    /* R3: Typography roles (size, line-height, weight) */
+    --type-h1-size: 2.5rem;
+    --type-h1-line: 1.2;
+    --type-h1-weight: 700;
+
+    --type-h2-size: 2rem;
+    --type-h2-line: 1.3;
+    --type-h2-weight: 700;
+
+    --type-h3-size: 1.5rem;
+    --type-h3-line: 1.4;
+    --type-h3-weight: 600;
+
+    --type-body-size: 1rem;
+    --type-body-line: 1.5;
+    --type-body-weight: 400;
+
+    --type-small-size: 0.875rem;
+    --type-small-line: 1.43;
+    --type-small-weight: 400;
+
+    --type-code-size: 0.8125rem;
+    --type-code-line: 1.54;
+    --type-code-weight: 400;
+
+    --type-label-size: 0.75rem;
+    --type-label-line: 1.33;
+    --type-label-weight: 500;
+
+    /* R4: Status Palette (theme-independent, opaque) */
+    --status-blue: hsl(210, 100%, 55%);
+    --status-green: hsl(145, 60%, 50%);
+    --status-orange: hsl(38, 92%, 58%);
+    --status-red: hsl(0, 72%, 60%);
+    --status-purple: hsl(280, 60%, 65%);
+
+    /* R5: Spacing Scale (4px base unit) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+
+    /* R6: Border Radius Scale (strictly increasing) */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+
+    /* R7: Border tokens (dark theme - border-bright > border in luminance) */
+    --border-vf: hsl(220, 18%, 20%);
+    --border-bright: hsl(220, 18%, 30%);
+    --border-focus: hsl(222, 85%, 65%);
+    --divider: hsl(220, 18%, 14%);
   }
 
   .dark {
@@ -141,6 +211,34 @@
     --sidebar-accent-foreground: 210 20% 92%;
     --sidebar-border: 220 18% 14%;
     --sidebar-ring: 222 85% 65%;
+  }
+
+  /* R2: Theme variant - light (inverted surface depth: 0 is lightest, 4 is darkest) */
+  [data-theme="light"] {
+    --surface-0: hsl(210, 20%, 98%);  /* Page background - lightest */
+    --surface-1: hsl(210, 20%, 96%);  /* Base content surface */
+    --surface-2: hsl(0, 0%, 100%);    /* Card container */
+    --surface-3: hsl(210, 20%, 94%);  /* Elevated component */
+    --surface-4: hsl(215, 25%, 18%);  /* Overlay - darkest */
+
+    --border-vf: hsl(215, 18%, 88%);
+    --border-bright: hsl(215, 18%, 92%);
+    --border-focus: hsl(222, 75%, 52%);
+    --divider: hsl(215, 18%, 92%);
+  }
+
+  /* R2: Theme variant - high-contrast-dark (WCAG AAA: text-on-surface-1 >= 7:1) */
+  [data-theme="high-contrast-dark"] {
+    --surface-0: hsl(220, 28%, 6%);   /* Page background - darkest */
+    --surface-1: hsl(220, 25%, 8%);   /* Base content (text contrast >= 7:1) */
+    --surface-2: hsl(220, 22%, 11%);  /* Card container */
+    --surface-3: hsl(220, 20%, 16%);  /* Elevated component */
+    --surface-4: hsl(220, 18%, 20%);  /* Overlay */
+
+    --border-vf: hsl(220, 100%, 50%);
+    --border-bright: hsl(220, 100%, 60%);
+    --border-focus: hsl(222, 100%, 65%);
+    --divider: hsl(220, 80%, 45%);
   }
 }
 
