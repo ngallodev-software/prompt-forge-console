@@ -75,7 +75,7 @@ export default function IntakeDetail() {
                 <StatusBadge
                   value={route.routeStatusLabel}
                   size="md"
-                  tone={route.routeStatus === "direct_kanban" ? "success" : route.routeStatus === "queue_review" || route.routeStatus === "unavailable" ? "warn" : "danger"}
+                  tone={route.routeStatus === "direct_kanban" ? "success" : route.routeStatus === "queue_review" ? "warn" : "danger"}
                 />
               </div>
               <p className="text-sm text-muted-foreground">{route.routeSummary}</p>

@@ -21,6 +21,7 @@ import { type Theme, useAppStore } from "@/stores/app-store";
 import type { Role } from "@/services/promptforge/types";
 import { toast } from "@/hooks/use-toast";
 import type { PfScope } from "@/services/promptforge/types";
+import { sanitizeErrorMessage } from "@/lib/error-utils";
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
   { value: "viewer", label: "Viewer", hint: "Read-only access." },
@@ -133,15 +134,29 @@ export default function Settings() {
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [secretBusy, setSecretBusy] = useState(false);
   const kanbanDiscoveryBaseUrl = runtimeDraft?.kanbanBaseUrl.trim() ?? "";
+  const kanbanDiscoveryPasscode = runtimeDraft?.kanbanPasscode ?? "";
+
+  // Debounce discovery params to avoid hammering backend on every keystroke
+  const [debouncedDiscoveryBaseUrl, setDebouncedDiscoveryBaseUrl] = useState(kanbanDiscoveryBaseUrl);
+  const [debouncedDiscoveryPasscode, setDebouncedDiscoveryPasscode] = useState(kanbanDiscoveryPasscode);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedDiscoveryBaseUrl(kanbanDiscoveryBaseUrl);
+      setDebouncedDiscoveryPasscode(kanbanDiscoveryPasscode);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [kanbanDiscoveryBaseUrl, kanbanDiscoveryPasscode]);
+
   const {
     data: discoveredKanbanWorkspaces,
     error: kanbanWorkspaceError,
     isFetching: isDiscoveringKanbanWorkspaces,
     refetch: refetchKanbanWorkspaces,
   } = useQuery({
-    queryKey: qk.kanbanWorkspaces(kanbanDiscoveryBaseUrl, runtimeDraft?.kanbanPasscode ?? ""),
-    queryFn: () => discoverKanbanWorkspaces(kanbanDiscoveryBaseUrl, runtimeDraft?.kanbanPasscode ?? ""),
-    enabled: kanbanDiscoveryBaseUrl.length > 0,
+    queryKey: qk.kanbanWorkspaces(debouncedDiscoveryBaseUrl, debouncedDiscoveryPasscode),
+    queryFn: () => discoverKanbanWorkspaces(debouncedDiscoveryBaseUrl, debouncedDiscoveryPasscode),
+    enabled: debouncedDiscoveryBaseUrl.length > 0,
     throwOnError: false,
   });
 
@@ -190,7 +205,7 @@ export default function Settings() {
     } catch (error) {
       toast({
         title: "Runtime save failed",
-        description: error instanceof Error ? error.message : "Unable to save runtime settings.",
+        description: sanitizeErrorMessage(error),
       });
     } finally {
       setRuntimeBusy(false);
@@ -214,7 +229,7 @@ export default function Settings() {
     } catch (error) {
       toast({
         title: "Secret rotation failed",
-        description: error instanceof Error ? error.message : "Unable to rotate secrets.",
+        description: sanitizeErrorMessage(error),
       });
     } finally {
       setSecretBusy(false);
@@ -405,11 +420,7 @@ export default function Settings() {
                   <ErrorState
                     className="mt-3"
                     title="No projects returned"
-                    message={
-                      projectsError instanceof Error
-                        ? projectsError.message
-                        : "The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
-                    }
+                    message={projectsError ? sanitizeErrorMessage(projectsError) : "The backend returned an empty projects list, so project-scoped workspace selection is unavailable."}
                   />
                 )}
               </div>
@@ -522,10 +533,10 @@ export default function Settings() {
               Kanban routing is saved with this Prompt Forge workspace scope. If you want a project-specific Kanban target, switch to the project workspace above first.
             </div>
           </div>
-          {backendSettingsError instanceof Error && (
+          {backendSettingsError && (
             <ErrorState
               title="Backend runtime settings unavailable"
-              message={backendSettingsError.message}
+              message={sanitizeErrorMessage(backendSettingsError)}
             />
           )}
           <div className="grid gap-3 md:grid-cols-2">
@@ -688,9 +699,9 @@ export default function Settings() {
               </Select>
               {kanbanWorkspaceError ? (
                 <p className="text-xs text-destructive">
-                  {kanbanWorkspaceError instanceof Error ? kanbanWorkspaceError.message : "Unable to discover Kanban workspaces."}
+                  {sanitizeErrorMessage(kanbanWorkspaceError)}
                 </p>
-              ) : kanbanDiscoveryBaseUrl && isDiscoveringKanbanWorkspaces ? (
+              ) : debouncedDiscoveryBaseUrl && isDiscoveringKanbanWorkspaces ? (
                 <p className="text-xs text-muted-foreground">Checking Kanban availability…</p>
               ) : discoveredKanbanWorkspaces && discoveredKanbanWorkspaces.workspaces.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Kanban reachable. No workspaces found for the current base URL.</p>
