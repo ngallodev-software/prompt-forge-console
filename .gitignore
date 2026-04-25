@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Dev cache files
+.dev-report-cache.md
+.forked-work-modified
