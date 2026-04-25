@@ -86,6 +86,8 @@ Defines the design token foundation for the prompt-forge-console frontend: the s
 ## Cross-References
 - cavekit-component-extraction.md — consumes Visual Foundation tokens (surfaces, borders, text, status, radius, spacing, typography) for all component styling.
 - cavekit-page-consolidation.md — consumes Visual Foundation spacing and surface tokens for page-level layout.
+- cavekit-tailwind-migration.md — implementation migration from custom CSS vars to Tailwind utilities.
 
 ## Changelog
+- 2026-04-25: **Implementation migrated to Tailwind CSS**. Requirements R1-R7 unchanged (surface hierarchy, themes, status palette, spacing, radius, typography, elevation). Implementation method changed from custom CSS variables (`--surface-0`, `--type-*`, `--space-*`) to Tailwind utilities via `--color-*` token layer. Components now use `bg-surface-2`, `text-xs`, `px-3` instead of arbitrary values. Visual output identical, suite-aligned with Kanban design system.
 - 2026-04-24: Initial brownfield cavekit. Captures the migration target from the legacy HSL semantic variable system in `prompt-forge` `index.css` to the Kanban surface-numbered token system, defining R1-R7 covering surface hierarchy, theme variants, typography, status palette, spacing, radius, and elevation rules.
