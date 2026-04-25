@@ -55,15 +55,37 @@ export const projects: Project[] = [
 // ──────────────────────────── Intake Notes
 const noteStatuses: PfNoteStatus[] = ["new", "imported", "processing", "processed", "processed", "processed", "error", "archived"];
 const devices = ["iphone-15", "mac-studio", "ipad-pro", "android-pixel-8", "obsidian-desktop"];
+const voiceRouteSpecs = [
+  { family: "kanban", target: "prompt-forge", status: "direct_kanban", replayable: true },
+  { family: "queue", target: "manual-review", status: "queue_review", replayable: true },
+  { family: "review", target: "triage", status: "queue_review", replayable: true },
+  { family: "experimental", target: "voice-lab", status: "unsupported", replayable: false },
+] as const;
 
 export const intakeNotes: IntakeNote[] = range(48).map((i) => {
   const status = noteStatuses[i % noteStatuses.length];
   const project = projects[i % projects.length];
   const eligible = status !== "archived" && rng() > 0.15;
+  const route = voiceRouteSpecs[i % voiceRouteSpecs.length];
+  const sourcePath = `Inbox/Voice/${route.family}/${route.target}/${project.slug}/2026/04/${String(i + 1).padStart(3, "0")}-${pick(["standup", "ideas", "todo", "review", "spec", "thought"])}.md`;
+  const routeRecord = {
+    source_path: sourcePath,
+    route_family: route.family,
+    route_target: route.target,
+    route_context: `${project.slug}/2026/04`,
+    route_status: route.status,
+    replayable: route.replayable,
+    replay_state:
+      route.status === "direct_kanban"
+        ? "Replay keeps the same source path and workspace key."
+        : route.status === "unsupported"
+          ? "Not replayable until the route policy explicitly grows this family."
+          : "Replay stays within queue/review unless policy changes.",
+  };
   return {
     id: uid("note", i + 1),
     project_id: project.id,
-    note_relative_path: `${project.slug}/2026/04/${String(i + 1).padStart(3, "0")}-${pick(["standup", "ideas", "todo", "review", "spec", "thought"])}.md`,
+    note_relative_path: sourcePath,
     status,
     watch_eligible: eligible,
     source_device: pick(devices),
@@ -77,6 +99,7 @@ export const intakeNotes: IntakeNote[] = range(48).map((i) => {
       destination: pick(["chat", "cli", "obsidian_note"]),
       mode: pick(["draft", "queue", "auto_dispatch"]),
       tags: ["voice", project.slug],
+      promptforge_route: routeRecord,
     },
     frontmatter_current: {
       destination: pick(["chat", "cli", "obsidian_note"]),
@@ -84,11 +107,12 @@ export const intakeNotes: IntakeNote[] = range(48).map((i) => {
       tags: ["voice", project.slug, "processed"],
       prompt_generation_id: uid("pg", i + 1),
       delivery_id: uid("del", i + 1),
+      promptforge_route: routeRecord,
       status,
     },
     metadata_json: !eligible
-      ? { eligibility_reason: "watch_eligible=false", skip_cause: "missing required frontmatter: prompt_type" }
-      : { eligibility_reason: "passed", source_path: `inbox/${i}.md` },
+      ? { eligibility_reason: "watch_eligible=false", skip_cause: "missing required frontmatter: prompt_type", promptforge_route: routeRecord }
+      : { eligibility_reason: "passed", source_path: sourcePath, promptforge_route: routeRecord },
     created_at: minutesAgo(15 + i * 17),
     updated_at: minutesAgo(2 + i * 13),
   };

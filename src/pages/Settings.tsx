@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/pf/ErrorState";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { HelpTip } from "@/components/pf/HelpTip";
+import { ScopeBadge } from "@/components/pf/ScopeBadge";
 import { discoverKanbanWorkspaces, getConsoleRuntimeSnapshot, getConsoleSettings, listProjects, patchConsoleRuntimeSettings, patchConsoleSecretSettings, purgeArchivedNotes, qk } from "@/services/promptforge";
 import { RUNTIME_ENVIRONMENT } from "@/services/promptforge/config";
 import { type Theme, useAppStore } from "@/stores/app-store";
@@ -126,6 +127,7 @@ export default function Settings() {
     throwOnError: false,
   });
   const hasProjects = projects.length > 0;
+  const selectedProject = workspace.scope === "project" ? projects.find((project) => project.id === workspace.projectId) ?? null : null;
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft | null>(null);
   const [secretDraft, setSecretDraft] = useState<SecretDraft>({});
   const [runtimeBusy, setRuntimeBusy] = useState(false);
@@ -229,6 +231,30 @@ export default function Settings() {
       <PageBody>
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="space-y-4 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Binding scope</h3>
+                <ScopeBadge value={settingsScope} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Kanban binding is edited in the same scope that owns the current console settings. Project-scoped settings stay attached to the selected project.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border px-3 py-2">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Current scope</div>
+                <div className="mt-1 text-sm font-medium capitalize">{settingsScope}</div>
+                <p className="mt-1 text-xs text-muted-foreground">This is the scope used by the binding and discovery fields below.</p>
+              </div>
+              <div className="rounded-md border px-3 py-2">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Project</div>
+                <div className="mt-1 text-sm font-medium">{settingsScope === "project" ? selectedProject?.name ?? "Project missing" : "Not project-scoped"}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {settingsScope === "project" ? "Only this project inherits the current Kanban binding." : "Global and user scopes do not narrow the binding to one project."}
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">Local console connectivity</h3>
@@ -481,6 +507,20 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               These values persist through the backend. The form below is scoped to the current workspace and saves only the supported server-owned keys.
             </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Active scope:</span>
+              <ScopeBadge value={settingsScope} />
+              {settingsScope === "project" ? (
+                <span>
+                  binding for <span className="font-mono text-text-primary">{selectedProject?.name ?? settingsProjectId ?? "current project"}</span>
+                </span>
+              ) : (
+                <span>Kanban binding is easiest to reason about at project scope. Use the workspace selector above before editing Kanban fields.</span>
+              )}
+            </div>
+            <div className="rounded-md border border-status-orange/30 bg-status-orange/10 px-3 py-2 text-xs text-text-primary">
+              Kanban routing is saved with this Prompt Forge workspace scope. If you want a project-specific Kanban target, switch to the project workspace above first.
+            </div>
           </div>
           {backendSettingsError instanceof Error && (
             <ErrorState

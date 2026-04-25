@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getHealth, qk, listIntakeNotes, listPromptGenerations, listDeliveries,
   listFailedProcessingRuns, getQueueDepth, getSlaSummary, getProjectThroughput,
+  summarizeVoiceRouteFamilies,
 } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { HealthCard } from "@/components/pf/HealthCard";
@@ -41,6 +42,10 @@ export default function Dashboard() {
   const totalNotes = throughput?.reduce((a, b) => a + b.notes, 0) ?? 0;
   const totalPrompts = throughput?.reduce((a, b) => a + b.prompts, 0) ?? 0;
   const totalDeliveries = throughput?.reduce((a, b) => a + b.deliveries, 0) ?? 0;
+  const voiceRouting = summarizeVoiceRouteFamilies(intakeIndex?.rows ?? []);
+  const voiceDirect = voiceRouting.kanban;
+  const voiceFallback = voiceRouting.queueReview;
+  const voiceUnsupported = voiceRouting.unsupported + voiceRouting.outsideRoot;
 
   return (
     <>
@@ -67,6 +72,33 @@ export default function Dashboard() {
           <MetricCard label="Prompts" value={totalPrompts} Icon={Activity} help={{ label: "Prompt count", content: "Prompt generations created from imported intake notes." }} />
           <MetricCard label="Deliveries" value={totalDeliveries} Icon={Send} help={{ label: "Delivery count", content: "Downstream dispatch attempts, including completed and failed deliveries." }} />
         </div>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold">Voice routing rollup</h3>
+              <HelpTip label="Routing rollup help" content="Aggregate counts for recursive voice intake. This is a rollup only; the route policy still lives on the intake detail and settings surfaces." />
+            </div>
+            <span className="text-xs text-muted-foreground">Derived from Inbox/Voice paths</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Direct Kanban</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceDirect}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes that resolve to the Kanban family.</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Queue / review</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceFallback}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes that stay in the review lane.</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Unsupported</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceUnsupported}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes outside the known route families or outside Inbox/Voice.</p>
+            </div>
+          </div>
+        </Card>
 
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
           <NeedsAttentionPanel
