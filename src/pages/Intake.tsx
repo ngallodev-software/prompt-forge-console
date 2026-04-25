@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import type { IntakeNote } from "@/services/promptforge/types";
-import { Eye } from "lucide-react";
+import { Eye, Activity } from "lucide-react";
 
 export default function Intake() {
   const navigate = useNavigate();
@@ -64,7 +64,20 @@ export default function Intake() {
     { key: "project", header: <span className="inline-flex items-center gap-1.5">Project<HelpTip label="Project help" content="Which project owns the note. This gives the path context instead of showing a bare folder name." /></span>, hideOnMobile: true, cell: (r) => <span className="text-sm">{projectLabel(r.project_id)}</span> },
     { key: "device", header: <span className="inline-flex items-center gap-1.5">Source<HelpTip label="Source device help" content="Device or source identity attached to the intake note. Often useful when the same project produces multiple note streams." /></span>, hideOnMobile: true, cell: (r) => <span className="text-xs font-mono text-muted-foreground">{r.source_device ?? "—"}</span> },
     { key: "updated", header: <span className="inline-flex items-center gap-1.5">Updated<HelpTip label="Updated time help" content="Last observed change time for the note record. Use this to sort by recency when chasing live failures." /></span>, hideOnMobile: true, cell: (r) => <span className="text-xs tabular-nums text-muted-foreground">{format(new Date(r.updated_at), "MMM d HH:mm")}</span> },
-    { key: "actions", header: "", width: "60px", cell: (r) => <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); navigate(`/intake/${r.id}`); }}><Eye className="h-3.5 w-3.5" /></Button> },
+    { key: "actions", header: "", width: "108px", cell: (row) => (
+      <div className="flex gap-2">
+        <Button asChild size="icon">
+          <a href={`/intake/${row.id}`} title="View details" onClick={(event) => event.stopPropagation()}>
+            <Eye className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+        <Button asChild size="icon" variant="secondary">
+          <a href={`/pipeline/${row.id}`} title="View trace" onClick={(event) => event.stopPropagation()}>
+            <Activity className="h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+    ) },
   ];
 
   return (
