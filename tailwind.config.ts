@@ -15,90 +15,80 @@ export default {
     },
     extend: {
       fontFamily: {
+        sans: ["var(--font-sans)"],
         mono: ["var(--font-mono)"],
       },
       colors: {
-        border: "hsl(var(--border))",
-        "border-subtle": "hsl(var(--border-subtle))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        // Surface hierarchy (Kanban-aligned)
         surface: {
-          raised: "hsl(var(--surface-raised))",
-          sunken: "hsl(var(--surface-sunken))",
+          0: "var(--color-surface-0)",
+          1: "var(--color-surface-1)",
+          2: "var(--color-surface-2)",
+          3: "var(--color-surface-3)",
+          4: "var(--color-surface-4)",
         },
+        // Borders
+        border: {
+          DEFAULT: "var(--color-border)",
+          bright: "var(--color-border-bright)",
+          focus: "var(--color-border-focus)",
+        },
+        divider: "var(--color-divider)",
+        // Text
+        text: {
+          primary: "var(--color-text-primary)",
+          secondary: "var(--color-text-secondary)",
+          tertiary: "var(--color-text-tertiary)",
+        },
+        // Accent
+        accent: {
+          DEFAULT: "var(--color-accent)",
+          hover: "var(--color-accent-hover)",
+          fg: "var(--color-accent-fg)",
+        },
+        // Status palette
+        status: {
+          blue: "var(--color-status-blue)",
+          green: "var(--color-status-green)",
+          orange: "var(--color-status-orange)",
+          red: "var(--color-status-red)",
+          purple: "var(--color-status-purple)",
+        },
+        // Legacy shadcn compat (for existing UI components)
+        background: "var(--color-surface-0)",
+        foreground: "var(--color-text-primary)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-          muted: "hsl(var(--primary-muted))",
+          DEFAULT: "var(--color-accent)",
+          foreground: "var(--color-accent-fg)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "var(--color-surface-2)",
+          foreground: "var(--color-text-primary)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--color-surface-2)",
+          foreground: "var(--color-text-secondary)",
         },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
+        destructive: {
+          DEFAULT: "var(--color-status-red)",
+          foreground: "#FFFFFF",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--color-surface-1)",
+          foreground: "var(--color-text-primary)",
         },
-        status: {
-          success: {
-            DEFAULT: "hsl(var(--status-success))",
-            foreground: "hsl(var(--status-success-foreground))",
-            muted: "hsl(var(--status-success-muted))",
-          },
-          warn: {
-            DEFAULT: "hsl(var(--status-warn))",
-            foreground: "hsl(var(--status-warn-foreground))",
-            muted: "hsl(var(--status-warn-muted))",
-          },
-          danger: {
-            DEFAULT: "hsl(var(--status-danger))",
-            foreground: "hsl(var(--status-danger-foreground))",
-            muted: "hsl(var(--status-danger-muted))",
-          },
-          info: {
-            DEFAULT: "hsl(var(--status-info))",
-            foreground: "hsl(var(--status-info-foreground))",
-            muted: "hsl(var(--status-info-muted))",
-          },
-          neutral: {
-            DEFAULT: "hsl(var(--status-neutral))",
-            foreground: "hsl(var(--status-neutral-foreground))",
-            muted: "hsl(var(--status-neutral-muted))",
-          },
+        popover: {
+          DEFAULT: "var(--color-surface-2)",
+          foreground: "var(--color-text-primary)",
         },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
-        },
+        input: "var(--color-border)",
+        ring: "var(--color-border-focus)",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
       },
       keyframes: {
         "accordion-down": {

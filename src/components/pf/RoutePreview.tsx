@@ -35,16 +35,16 @@ type Tone = StatusTone;
 
 const toneStyles: Record<StatusTone, CSSProperties> = {
   success: {
-    backgroundColor: "var(--status-green)",
-    color: "var(--surface-0)",
+    backgroundColor: "var(--color-status-green)",
+    color: "#FFFFFF",
   },
   warn: {
-    backgroundColor: "var(--status-orange)",
-    color: "var(--surface-0)",
+    backgroundColor: "var(--color-status-orange)",
+    color: "#FFFFFF",
   },
   danger: {
-    backgroundColor: "var(--status-red)",
-    color: "var(--surface-0)",
+    backgroundColor: "var(--color-status-red)",
+    color: "#FFFFFF",
   },
 };
 
@@ -65,20 +65,11 @@ function Cell({
   className?: string;
 }) {
   return (
-    <div className={`rounded-md border border-[color:var(--border-vf)] px-[var(--space-3)] py-[var(--space-3)] ${className}`.trim()}>
-      <div
-        className="text-[length:var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)] uppercase tracking-[0.18em]"
-      >
+    <div className={`rounded-md border border-border px-3 py-3 ${className}`.trim()}>
+      <div className="text-xs font-medium leading-tight uppercase tracking-wider">
         {label}
       </div>
-      <div
-        className={
-          code
-            ? "mt-[var(--space-1)] text-[length:var(--type-code-size)] leading-[var(--type-code-line)]"
-            : "mt-[var(--space-1)] text-[length:var(--type-body-size)] leading-[var(--type-body-line)]"
-        }
-        style={code ? { fontFamily: "var(--font-mono-vf)" } : undefined}
-      >
+      <div className={code ? "mt-1 text-[13px] leading-snug font-mono" : "mt-1 text-sm leading-normal"}>
         {value}
       </div>
     </div>
@@ -94,7 +85,7 @@ function Badge({
 }) {
   return (
     <span
-      className="inline-flex items-center rounded-full px-[var(--space-3)] py-1 text-[length:var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)] uppercase tracking-[0.16em]"
+      className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium leading-tight uppercase tracking-wider"
       style={toneStyles[tone]}
     >
       {children}
@@ -113,18 +104,18 @@ export function RoutePreview({
   const reviewHref = note.deliveryId ? `/deliveries?id=${encodeURIComponent(note.deliveryId)}` : null;
 
   return (
-    <section className="rounded-xl border border-[color:var(--border-vf)] bg-[var(--surface-2)] p-[var(--space-3)]">
-      <div className="space-y-[var(--space-4)]">
-        <header className="flex flex-wrap items-start justify-between gap-[var(--space-3)]">
-          <div className="flex items-center gap-[var(--space-3)]">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[color:var(--border-vf)] bg-[var(--surface-1)]">
+    <section className="rounded-xl border border-border bg-surface-2 p-3">
+      <div className="space-y-4">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-1">
               <Route className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <h3 className="text-[length:var(--type-body-size)] font-[var(--type-body-weight)] leading-[var(--type-body-line)]">
+              <h3 className="text-sm font-normal leading-normal">
                 Route preview
               </h3>
-              <p className="text-[length:var(--type-body-size)] leading-[var(--type-body-line)]">
+              <p className="text-sm leading-normal">
                 {emptyValue(route.routeSummary, "—")}
               </p>
             </div>
@@ -132,18 +123,18 @@ export function RoutePreview({
           <Badge tone={statusTone}>{emptyValue(route.routeStatusLabel, route.routeStatus || "unknown")}</Badge>
         </header>
 
-        <div className="grid gap-[var(--space-4)] sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Cell label="Source folder" value={emptyValue(route.sourceFolder, "—")} code />
           <Cell label="Route family" value={emptyValue(route.routeFamily, "unsupported")} code />
           <Cell label="Route target" value={emptyValue(route.routeTarget, "—")} code />
           <Cell label="Route context" value={emptyValue(route.routeContext, "—")} code />
         </div>
 
-        <div className="grid gap-[var(--space-4)] sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           <Cell
             label="Replay state"
             value={`${emptyValue(route.replayState, "—")}${route.replayable ? " · replayable" : " · not replayable"}`}
-            className="bg-[var(--surface-1)]"
+            className="bg-surface-1"
           />
           <Cell
             label="Kanban binding"
@@ -152,20 +143,20 @@ export function RoutePreview({
                 ? `${emptyValue(kanbanBinding.baseUrl, "unset")} · ${emptyValue(kanbanBinding.workspaceId, "unset")}`
                 : `Unavailable · ${emptyValue(kanbanBinding.baseUrl, "unset")} · ${emptyValue(kanbanBinding.workspaceId, "unset")}`
             }
-            className="bg-[var(--surface-1)]"
+            className="bg-surface-1"
           />
         </div>
 
-        <div className="flex flex-wrap gap-[var(--space-3)]">
+        <div className="flex flex-wrap gap-3">
           <a
-            className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--border-vf)] bg-transparent px-[var(--space-3)] text-[length:var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)] no-underline transition-colors hover:bg-[var(--surface-1)]"
+            className="inline-flex min-h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 text-xs font-medium leading-tight no-underline transition-colors hover:bg-surface-1"
             href={`/pipeline/${encodeURIComponent(note.id)}`}
           >
             Open pipeline
           </a>
           {reviewHref ? (
             <a
-              className="inline-flex min-h-9 items-center justify-center rounded-md border border-[color:var(--border-vf)] bg-transparent px-[var(--space-3)] text-[length:var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)] no-underline transition-colors hover:bg-[var(--surface-1)]"
+              className="inline-flex min-h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 text-xs font-medium leading-tight no-underline transition-colors hover:bg-surface-1"
               href={reviewHref}
             >
               Review delivery
@@ -173,9 +164,9 @@ export function RoutePreview({
           ) : null}
         </div>
 
-        <footer className="flex flex-wrap items-center gap-[var(--space-3)]">
+        <footer className="flex flex-wrap items-center gap-3">
           <Badge tone={scope.kind === "project" ? "success" : "warn"}>{scope.kind}</Badge>
-          <div className="text-[length:var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)] uppercase tracking-[0.16em]">
+          <div className="text-xs font-medium leading-tight uppercase tracking-wider">
             {scope.kind === "project"
               ? `${emptyValue(scope.projectName, "Untitled project")} · ${emptyValue(scope.projectId, "unset")}`
               : "Global fallback scope"}

@@ -46,17 +46,17 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
     <form
       onSubmit={handleSave}
       className={cn(
-        "rounded-lg border border-[var(--border-vf)] bg-[var(--surface-2)] p-[var(--space-4)]",
-        "space-y-[var(--space-4)]",
+        "rounded-lg border border-[border] bg-[surface-2] p-[4]",
+        "space-y-[4]",
       )}
     >
-      <div className="flex items-start justify-between gap-[var(--space-4)]">
+      <div className="flex items-start justify-between gap-[4]">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <Badge
               variant="outline"
               className={cn(
-                "border-[var(--border-vf)] bg-[var(--surface-3)] text-[var(--foreground)]",
+                "border-[border] bg-[surface-3] text-[var(--foreground)]",
                 "px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]",
               )}
             >
@@ -64,8 +64,8 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
             </Badge>
             <span
               className={cn(
-                "text-[var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)]",
-                "text-[color:var(--foreground)]",
+                "text-xs font-medium leading-tight",
+                "text-text-primary",
               )}
             >
               Kanban binding scope
@@ -76,13 +76,13 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
         </div>
       </div>
 
-      <div className="space-y-[var(--space-4)]">
+      <div className="space-y-[4]">
         <div className="space-y-1.5">
           <label
             htmlFor="kanban-base-url"
             className={cn(
-              "block text-[var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)]",
-              "text-[color:var(--foreground)]",
+              "block text-xs font-medium leading-tight",
+              "text-text-primary",
             )}
           >
             baseUrl
@@ -94,9 +94,9 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
             value={draft.baseUrl}
             onChange={handleBaseUrlChange}
             className={cn(
-              "w-full rounded-[var(--radius-md)] border border-[var(--border-vf)] bg-[var(--surface-1)] px-3 py-2",
-              "text-sm text-[color:var(--foreground)] outline-none transition-colors",
-              "focus:border-[var(--border-focus)] focus:ring-0",
+              "w-full rounded-[rounded-md] border border-[border] bg-[surface-1] px-3 py-2",
+              "text-sm text-text-primary outline-none transition-colors",
+              "focus:border-[border-focus] focus:ring-0",
             )}
           />
         </div>
@@ -105,8 +105,8 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
           <label
             htmlFor="kanban-workspace-id"
             className={cn(
-              "block text-[var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)]",
-              "text-[color:var(--foreground)]",
+              "block text-xs font-medium leading-tight",
+              "text-text-primary",
             )}
           >
             workspaceId
@@ -118,9 +118,9 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
             value={draft.workspaceId}
             onChange={handleWorkspaceIdChange}
             className={cn(
-              "w-full rounded-[var(--radius-md)] border border-[var(--border-vf)] bg-[var(--surface-1)] px-3 py-2",
-              "text-sm text-[color:var(--foreground)] outline-none transition-colors",
-              "focus:border-[var(--border-focus)] focus:ring-0",
+              "w-full rounded-[rounded-md] border border-[border] bg-[surface-1] px-3 py-2",
+              "text-sm text-text-primary outline-none transition-colors",
+              "focus:border-[border-focus] focus:ring-0",
             )}
           />
         </div>
@@ -129,8 +129,8 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
           <label
             htmlFor="kanban-passcode"
             className={cn(
-              "block text-[var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)]",
-              "text-[color:var(--foreground)]",
+              "block text-xs font-medium leading-tight",
+              "text-text-primary",
             )}
           >
             passcode
@@ -142,18 +142,18 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
             value={draft.passcode}
             onChange={handlePasscodeChange}
             className={cn(
-              "w-full rounded-[var(--radius-md)] border border-[var(--border-vf)] bg-[var(--surface-1)] px-3 py-2",
-              "text-sm text-[color:var(--foreground)] outline-none transition-colors",
-              "focus:border-[var(--border-focus)] focus:ring-0",
+              "w-full rounded-[rounded-md] border border-[border] bg-[surface-1] px-3 py-2",
+              "text-sm text-text-primary outline-none transition-colors",
+              "focus:border-[border-focus] focus:ring-0",
             )}
           />
         </div>
 
         {discovery.data && discovery.data.workspaces.length > 0 && (
           <div>
-            <label className="text-[length:var(--type-label-size)]">Discovered workspaces</label>
+            <label className="text-xs">Discovered workspaces</label>
             <select
-              className="bg-[var(--surface-3)] border border-[var(--border-vf)] rounded-[var(--radius-md)] px-2 py-1 w-full"
+              className="bg-[surface-3] border border-[border] rounded-[rounded-md] px-2 py-1 w-full"
               value={draft.workspaceId}
               onChange={(e) => {
                 const workspace = discovery.data.workspaces.find((w) => w.workspaceId === e.target.value);
@@ -173,13 +173,13 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
         )}
 
         {discovery.data && draft.workspaceId && (
-          <div className="text-[length:var(--type-small-size)]">
+          <div className="text-sm">
             Current: {discovery.data.workspaces.find((w) => w.workspaceId === draft.workspaceId)?.name ?? draft.workspaceId}
           </div>
         )}
 
         {discovery.error && (
-          <div className="text-[length:var(--type-small-size)] text-[var(--status-red)]">
+          <div className="text-sm text-status-red">
             {sanitizeErrorMessage(discovery.error, draft.passcode)}
           </div>
         )}
@@ -189,9 +189,9 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
         <button
           type="submit"
           className={cn(
-            "inline-flex h-10 items-center justify-center rounded-[var(--radius-md)]",
-            "border border-[var(--border-vf)] bg-[var(--surface-3)] px-4 text-sm font-medium text-[color:var(--foreground)] transition-colors",
-            "hover:bg-[var(--surface-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2",
+            "inline-flex h-10 items-center justify-center rounded-[rounded-md]",
+            "border border-[border] bg-[surface-3] px-4 text-sm font-medium text-text-primary transition-colors",
+            "hover:bg-[surface-1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[border-focus] focus-visible:ring-offset-2",
           )}
         >
           Save

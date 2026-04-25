@@ -880,19 +880,19 @@ export default function Settings() {
         help={{ label: "Settings help", content: "Use tabs to edit runtime, secrets, integrations, and project drafts." }}
       />
       <PageBody>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--divider)] bg-[var(--surface-1)]">
-          <div className="border-b border-[var(--divider)]">
-            <div className="flex flex-wrap gap-[var(--space-2)] p-[var(--space-2)]">
+        <div className="rounded-lg border border-divider bg-surface-1">
+          <div className="border-b border-divider">
+            <div className="flex flex-wrap gap-2 p-2">
               {(["runtime", "secrets", "integrations", "projects"] as const).map((tab) => (
                 <button
                   key={tab}
                   type="button"
                   onClick={() => setActiveTab(tab)}
                   className={cn(
-                    "px-[var(--space-4)] py-[var(--space-2)] border-b-2 text-sm",
+                    "px-4 py-2 border-b-2 text-sm",
                     activeTab === tab
-                      ? "bg-[var(--surface-3)] border-[var(--border-bright)]"
-                      : "bg-[var(--surface-2)] border-transparent",
+                      ? "bg-surface-3 border-border-bright"
+                      : "bg-surface-2 border-transparent",
                   )}
                 >
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -901,7 +901,7 @@ export default function Settings() {
             </div>
           </div>
 
-          <div className="p-[var(--space-4)]">
+          <div className="p-4">
             <section className={activeTab === "runtime" ? "block" : "hidden"}>
               <RuntimeTab
                 runtime={runtime}
