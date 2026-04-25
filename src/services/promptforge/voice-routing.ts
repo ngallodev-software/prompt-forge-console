@@ -34,6 +34,20 @@ function getString(record: RouteRecord, keys: string[]): string | undefined {
   return undefined;
 }
 
+function getJoinedPath(record: RouteRecord, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const parts = value
+        .map((part) => (typeof part === "string" ? part.trim() : ""))
+        .filter(Boolean);
+      if (parts.length > 0) return parts.join("/");
+    }
+  }
+  return undefined;
+}
+
 function getBoolean(record: RouteRecord, keys: string[]): boolean | undefined {
   for (const key of keys) {
     const value = record[key];
@@ -46,7 +60,7 @@ function getRouteRecord(note: IntakeNote): RouteRecord | undefined {
   const candidates = [note.frontmatter_current, note.frontmatter_original, note.metadata_json];
   for (const candidate of candidates) {
     if (!isRecord(candidate)) continue;
-    const route = candidate.promptforge_route ?? candidate.promptforgeRoute;
+    const route = candidate.route ?? candidate.promptforge_route ?? candidate.promptforgeRoute;
     if (isRecord(route)) return route;
   }
   return undefined;
@@ -157,7 +171,7 @@ function summarizeRoute(parsed: ParsedVoiceRoute, kanbanReady: boolean): VoiceRo
 
 function getSourcePath(note: IntakeNote): string {
   const routeRecord = getRouteRecord(note);
-  const explicitPath = routeRecord ? getString(routeRecord, ["source_path", "sourcePath"]) : undefined;
+  const explicitPath = routeRecord ? getString(routeRecord, ["source_relative_path", "source_path", "sourcePath"]) : undefined;
   const metadataPath = isRecord(note.metadata_json) ? getString(note.metadata_json, ["source_path", "sourcePath"]) : undefined;
   return normalizePath(explicitPath ?? metadataPath ?? note.note_relative_path);
 }
@@ -166,10 +180,10 @@ function parseExplicitRoute(note: IntakeNote): ParsedVoiceRoute | null {
   const routeRecord = getRouteRecord(note);
   if (!routeRecord) return null;
 
-  const sourcePath = getString(routeRecord, ["source_path", "sourcePath"]);
+  const sourcePath = getString(routeRecord, ["source_relative_path", "source_path", "sourcePath"]);
   const routeFamily = getString(routeRecord, ["route_family", "routeFamily"]);
   const routeTarget = getString(routeRecord, ["route_target", "routeTarget"]);
-  const routeContext = getString(routeRecord, ["route_context", "routeContext"]);
+  const routeContext = getJoinedPath(routeRecord, ["route_context", "routeContext"]);
   if (!sourcePath && !routeFamily && !routeTarget && !routeContext) return null;
 
   const parsed = splitRoute(sourcePath ?? note.note_relative_path);
@@ -195,10 +209,14 @@ export function describeVoiceRoute(note: IntakeNote, kanbanReady: boolean): Voic
   const declaredStatus = routeRecord ? getString(routeRecord, ["route_status", "routeStatus"]) : undefined;
   const declaredReplayable = routeRecord ? getBoolean(routeRecord, ["replayable"]) : undefined;
   const declaredReplayState = routeRecord ? getString(routeRecord, ["replay_state", "replayState"]) : undefined;
+  const normalizedStatus =
+    declaredStatus === "unsupported"
+      ? "unsupported"
+      : summary.routeStatus;
 
   return {
     ...summary,
-    routeStatus: (declaredStatus as VoiceRouteStatus | undefined) ?? summary.routeStatus,
+    routeStatus: normalizedStatus,
     replayable: declaredReplayable ?? summary.replayable,
     replayState: declaredReplayState ?? summary.replayState,
   };

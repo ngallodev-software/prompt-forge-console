@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { adaptPageResult } from "../api";
+import { describe, it, expect, vi } from "vitest";
+import { adaptPageResult, discoverKanbanWorkspaces } from "../api";
 import { ApiError, BackendUnavailableError, NotFoundError, ValidationError, StrictModeError } from "../errors";
+import { useAppStore } from "@/stores/app-store";
 
 // ──────────────────────────── Error classes
 
@@ -122,5 +123,29 @@ describe("adaptPageResult", () => {
     };
     const result = adaptPageResult(raw as never, "promptGenerations", 25);
     expect(result.rows).toEqual(items);
+  });
+});
+
+describe("discoverKanbanWorkspaces", () => {
+  it("surfaces authentication failures with passcode guidance", async () => {
+    const previousMockData = useAppStore.getState().useMockData;
+    const originalFetch = globalThis.fetch;
+
+    useAppStore.setState({ useMockData: false });
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      text: async () => "Authentication required",
+    })) as typeof fetch;
+
+    try {
+      await expect(discoverKanbanWorkspaces("http://127.0.0.1:3484")).rejects.toThrow(
+        "Kanban requires authentication. Enter the current Kanban passcode in Settings, then refresh workspace discovery.",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      useAppStore.setState({ useMockData: previousMockData });
+    }
   });
 });

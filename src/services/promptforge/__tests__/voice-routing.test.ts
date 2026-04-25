@@ -11,9 +11,9 @@ function makeNote(path: string, route?: Record<string, unknown>): IntakeNote {
     watch_eligible: true,
     source_device: "iphone",
     body_text: "# Voice memo",
-    frontmatter_original: route ? { promptforge_route: route } : {},
-    frontmatter_current: route ? { promptforge_route: route } : {},
-    metadata_json: route ? { promptforge_route: route } : {},
+    frontmatter_original: route ? { route } : {},
+    frontmatter_current: route ? { route } : {},
+    metadata_json: route ? { route } : {},
     created_at: "2026-04-24T00:00:00.000Z",
     updated_at: "2026-04-24T00:00:00.000Z",
   };
@@ -39,11 +39,19 @@ describe("parseVoiceRoute", () => {
 
 describe("describeVoiceRoute", () => {
   it("describes direct kanban routing when binding is ready", () => {
-    const note = makeNote("Inbox/Voice/kanban/prompt-forge/research/note.md");
+    const note = makeNote("Inbox/Voice/kanban/prompt-forge/research/note.md", {
+      source_relative_path: "Inbox/Voice/kanban/prompt-forge/research/note.md",
+      route_family: "kanban",
+      route_target: "prompt-forge",
+      route_context: ["research", "ops"],
+      route_status: "recognized",
+      replayable: true,
+    });
     const route = describeVoiceRoute(note, true);
     expect(route.routeStatus).toBe("direct_kanban");
     expect(route.replayable).toBe(true);
     expect(route.routeSummary).toContain("Kanban workspace key prompt-forge");
+    expect(route.routeContext).toBe("research/ops");
   });
 
   it("describes kanban fallback when binding is unavailable", () => {
