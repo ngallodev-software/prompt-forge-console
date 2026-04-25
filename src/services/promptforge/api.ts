@@ -159,6 +159,9 @@ function humanizeKanbanError(error: unknown): Error {
   if (detail.includes("kanban_response_invalid")) {
     return new Error("Kanban responded with an unexpected payload.");
   }
+  if (detail.includes("kanban_http_error:")) {
+    return new Error(`Kanban returned an HTTP error. ${detail}`);
+  }
   return error instanceof Error ? error : new Error(detail);
 }
 
