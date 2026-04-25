@@ -68,8 +68,27 @@ function getHydrationTtlMs(): number {
   return Number.isFinite(configured) && configured > 0 ? configured : HYDRATION_TTL_MS;
 }
 
+export function normalizeRuntimeApiBaseUrl(
+  apiBaseUrl: string | undefined,
+  runtimeHostname = typeof window !== "undefined" ? window.location.hostname : "",
+  runtimeOrigin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : defaultConsoleSettings.apiBaseUrl,
+): string {
+  const value = apiBaseUrl?.trim().replace(/\/+$/, "");
+  if (!value) return ENV_API_BASE;
+
+  const currentOrigin = runtimeOrigin.replace(/\/+$/, "");
+  const isLoopbackSetting = value === "http://localhost:8090" || value === "http://127.0.0.1:8090";
+  const isLanHost = runtimeHostname && runtimeHostname !== "localhost" && runtimeHostname !== "127.0.0.1";
+
+  if (isLoopbackSetting && isLanHost) {
+    return currentOrigin;
+  }
+
+  return value;
+}
+
 function getApiBase(): string {
-  return useAppStore.getState().consoleSettings.apiBaseUrl.trim().replace(/\/+$/, "") || ENV_API_BASE;
+  return normalizeRuntimeApiBaseUrl(useAppStore.getState().consoleSettings.apiBaseUrl);
 }
 
 function getBootstrapPath(): string {
@@ -98,11 +117,15 @@ function replaceArrayInPlace<T>(target: T[], next?: unknown) {
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   try {
+    const headers: Record<string, string> = {};
+    if (init?.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
     const res = await fetch(`${getApiBase()}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
         ...(init?.headers || {}),
+        ...headers,
       },
     });
     if (!res.ok) {

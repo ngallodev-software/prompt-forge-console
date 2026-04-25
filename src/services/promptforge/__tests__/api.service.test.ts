@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { adaptPageResult, discoverKanbanWorkspaces } from "../api";
+import { adaptPageResult, discoverKanbanWorkspaces, normalizeRuntimeApiBaseUrl } from "../api";
 import { ApiError, BackendUnavailableError, NotFoundError, ValidationError, StrictModeError } from "../errors";
 import { useAppStore } from "@/stores/app-store";
 
@@ -147,5 +147,20 @@ describe("discoverKanbanWorkspaces", () => {
       globalThis.fetch = originalFetch;
       useAppStore.setState({ useMockData: previousMockData });
     }
+  });
+});
+
+describe("normalizeRuntimeApiBaseUrl", () => {
+  it("rewrites stale localhost api settings on LAN hosts", () => {
+    expect(normalizeRuntimeApiBaseUrl("http://localhost:8090", "prompt-forge.home.arpa", "http://prompt-forge.home.arpa")).toBe(
+      "http://prompt-forge.home.arpa",
+    );
+    expect(normalizeRuntimeApiBaseUrl("http://127.0.0.1:8090", "prompt-forge.home.arpa", "http://prompt-forge.home.arpa")).toBe(
+      "http://prompt-forge.home.arpa",
+    );
+  });
+
+  it("preserves localhost api settings on localhost", () => {
+    expect(normalizeRuntimeApiBaseUrl("http://localhost:8090", "localhost", "http://localhost:5174")).toBe("http://localhost:8090");
   });
 });

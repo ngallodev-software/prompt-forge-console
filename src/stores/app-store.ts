@@ -6,9 +6,18 @@ export type Theme = "light" | "dark";
 export type Workspace = { scope: "global" | "project"; projectId: string | null };
 
 export const defaultConsoleSettings: ConsoleSettings = {
-  apiBaseUrl: "http://localhost:8090",
+  apiBaseUrl: typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://localhost:8090",
   bootstrapPath: "/console/bootstrap",
 };
+
+function normalizeLegacyApiBaseUrl(apiBaseUrl: string | undefined): string {
+  const value = apiBaseUrl?.trim();
+  if (!value) return defaultConsoleSettings.apiBaseUrl;
+  if (value === "http://localhost:8090" || value === "http://127.0.0.1:8090") {
+    return defaultConsoleSettings.apiBaseUrl;
+  }
+  return value;
+}
 
 const defaultWorkspace: Workspace = { scope: "global", projectId: null };
 const defaultPollingMs = 15000;
@@ -74,7 +83,7 @@ export const useAppStore = create<AppState>()(
           workspace: state.workspace ?? defaultWorkspace,
           useMockData: state.useMockData ?? true,
           consoleSettings: {
-            apiBaseUrl: state.consoleSettings?.apiBaseUrl ?? defaultConsoleSettings.apiBaseUrl,
+            apiBaseUrl: normalizeLegacyApiBaseUrl(state.consoleSettings?.apiBaseUrl),
             bootstrapPath: state.consoleSettings?.bootstrapPath ?? defaultConsoleSettings.bootstrapPath,
           },
           pollingMs: sanitizePollingMs(state.pollingMs ?? defaultPollingMs),
