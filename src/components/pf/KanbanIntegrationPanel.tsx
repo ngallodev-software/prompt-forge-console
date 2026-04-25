@@ -2,6 +2,8 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useKanbanWorkspaceDiscovery } from "@/lib/kanban-discovery";
+import { sanitizeErrorMessage } from "@/lib/error-utils";
 
 export interface KanbanIntegrationPanelProps {
   initialDraft: {
@@ -19,6 +21,9 @@ export interface KanbanIntegrationPanelProps {
 
 export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: KanbanIntegrationPanelProps) {
   const [draft, setDraft] = useState(initialDraft);
+
+  // T-043: Wire discovery hook
+  const discovery = useKanbanWorkspaceDiscovery(draft.baseUrl, draft.passcode);
 
   const handleBaseUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
     setDraft((current) => ({ ...current, baseUrl: event.target.value }));
@@ -145,6 +150,54 @@ export function KanbanIntegrationPanel({ initialDraft, binding, onSubmit }: Kanb
             )}
           />
         </div>
+
+        {/* T-044, T-045: Discovered workspaces dropdown + current workspace display */}
+        {discovery.data && discovery.data.workspaces.length > 0 && (
+          <div className="space-y-1.5">
+            <label
+              htmlFor="discovered-workspaces"
+              className={cn(
+                "block text-[var(--type-label-size)] font-[var(--type-label-weight)] leading-[var(--type-label-line)]",
+                "text-[color:var(--foreground)]",
+              )}
+            >
+              Discovered workspaces
+            </label>
+            <select
+              id="discovered-workspaces"
+              className={cn(
+                "w-full rounded-[var(--radius-md)] border border-[var(--border-vf)] bg-[var(--surface-3)] px-3 py-2",
+                "text-sm text-[color:var(--foreground)] outline-none transition-colors",
+                "focus:border-[var(--border-focus)] focus:ring-0",
+              )}
+              onChange={(e) => {
+                const workspace = discovery.data.workspaces.find(w => w.workspaceId === e.target.value);
+                if (workspace) {
+                  setDraft(prev => ({ ...prev, workspaceId: workspace.workspaceId }));
+                }
+              }}
+            >
+              <option value="">Select a workspace</option>
+              {discovery.data.workspaces.map(ws => (
+                <option key={ws.workspaceId} value={ws.workspaceId}>
+                  {ws.name} ({ws.path})
+                </option>
+              ))}
+            </select>
+            {draft.workspaceId && (
+              <div className="text-[length:var(--type-small-size)]">
+                Current: {discovery.data.workspaces.find(w => w.workspaceId === draft.workspaceId)?.name ?? draft.workspaceId}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* T-046, T-048: Discovery error display with sanitization */}
+        {discovery.error && (
+          <div className="text-[length:var(--type-small-size)] text-[var(--status-red)]">
+            {sanitizeErrorMessage(discovery.error, draft.passcode)}
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end">
