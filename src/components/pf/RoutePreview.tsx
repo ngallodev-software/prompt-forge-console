@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Route } from "lucide-react";
+import { getRouteStatusTone, type StatusTone } from "@/lib/route-status-utils";
 
 export interface RoutePreviewProps {
   note: {
@@ -30,9 +31,9 @@ export interface RoutePreviewProps {
   };
 }
 
-type Tone = "success" | "warn" | "danger";
+type Tone = StatusTone;
 
-const toneStyles: Record<Tone, CSSProperties> = {
+const toneStyles: Record<StatusTone, CSSProperties> = {
   success: {
     backgroundColor: "var(--status-green)",
     color: "var(--surface-0)",
@@ -46,12 +47,6 @@ const toneStyles: Record<Tone, CSSProperties> = {
     color: "var(--surface-0)",
   },
 };
-
-function getStatusTone(routeStatus: string): Tone {
-  if (routeStatus === "direct_kanban") return "success";
-  if (routeStatus === "queue_review") return "warn";
-  return "danger";
-}
 
 function emptyValue(value: string | null | undefined, fallback: string) {
   const trimmed = typeof value === "string" ? value.trim() : "";
@@ -114,7 +109,7 @@ export function RoutePreview({
   kanbanBinding,
   scope,
 }: RoutePreviewProps) {
-  const statusTone = getStatusTone(route.routeStatus);
+  const statusTone = getRouteStatusTone(route.routeStatus);
   const reviewHref = note.deliveryId ? `/deliveries?id=${encodeURIComponent(note.deliveryId)}` : null;
 
   return (
