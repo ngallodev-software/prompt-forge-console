@@ -14,12 +14,14 @@ import { ErrorState } from "@/components/pf/ErrorState";
 import { ConfirmationModal } from "@/components/pf/ConfirmationModal";
 import { PermissionGuard } from "@/components/pf/PermissionGuard";
 import { HelpTip } from "@/components/pf/HelpTip";
-import { getConsoleRuntimeSnapshot, getConsoleSettings, listProjects, patchConsoleRuntimeSettings, patchConsoleSecretSettings, purgeArchivedNotes, qk } from "@/services/promptforge";
+import { ScopeBadge } from "@/components/pf/ScopeBadge";
+import { discoverKanbanWorkspaces, getConsoleRuntimeSnapshot, getConsoleSettings, listProjects, patchConsoleRuntimeSettings, patchConsoleSecretSettings, purgeArchivedNotes, qk } from "@/services/promptforge";
 import { RUNTIME_ENVIRONMENT } from "@/services/promptforge/config";
 import { type Theme, useAppStore } from "@/stores/app-store";
 import type { Role } from "@/services/promptforge/types";
 import { toast } from "@/hooks/use-toast";
 import type { PfScope } from "@/services/promptforge/types";
+import { sanitizeErrorMessage } from "@/lib/error-utils";
 
 const ROLE_OPTIONS: Array<{ value: Role; label: string; hint: string }> = [
   { value: "viewer", label: "Viewer", hint: "Read-only access." },
@@ -57,6 +59,9 @@ type RuntimeDraft = {
   codexReasoningEffort: (typeof CODEX_REASONING_OPTIONS)[number];
   openaiBaseUrl: string;
   anthropicBaseUrl: string;
+  kanbanBaseUrl: string;
+  kanbanWorkspaceId: string;
+  kanbanPasscode: string;
 };
 
 type SecretDraft = Record<string, string>;
@@ -106,16 +111,54 @@ export default function Settings() {
   } = useAppStore();
   const settingsScope: PfScope = workspace.scope;
   const settingsProjectId = workspace.scope === "project" ? workspace.projectId ?? null : null;
-  const { data: projects = [] } = useQuery({ queryKey: qk.projects, queryFn: listProjects });
-  const { data: backendSettings } = useQuery({
+  const {
+    data: projects = [],
+    error: projectsError,
+  } = useQuery({
+    queryKey: qk.projects,
+    queryFn: listProjects,
+    throwOnError: false,
+  });
+  const {
+    data: backendSettings,
+    error: backendSettingsError,
+  } = useQuery({
     queryKey: qk.settings(settingsScope, settingsProjectId),
     queryFn: () => getConsoleSettings(settingsScope, settingsProjectId),
+    throwOnError: false,
   });
   const hasProjects = projects.length > 0;
+  const selectedProject = workspace.scope === "project" ? projects.find((project) => project.id === workspace.projectId) ?? null : null;
   const [runtimeDraft, setRuntimeDraft] = useState<RuntimeDraft | null>(null);
   const [secretDraft, setSecretDraft] = useState<SecretDraft>({});
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [secretBusy, setSecretBusy] = useState(false);
+  const kanbanDiscoveryBaseUrl = runtimeDraft?.kanbanBaseUrl.trim() ?? "";
+  const kanbanDiscoveryPasscode = runtimeDraft?.kanbanPasscode ?? "";
+
+  // Debounce discovery params to avoid hammering backend on every keystroke
+  const [debouncedDiscoveryBaseUrl, setDebouncedDiscoveryBaseUrl] = useState(kanbanDiscoveryBaseUrl);
+  const [debouncedDiscoveryPasscode, setDebouncedDiscoveryPasscode] = useState(kanbanDiscoveryPasscode);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedDiscoveryBaseUrl(kanbanDiscoveryBaseUrl);
+      setDebouncedDiscoveryPasscode(kanbanDiscoveryPasscode);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [kanbanDiscoveryBaseUrl, kanbanDiscoveryPasscode]);
+
+  const {
+    data: discoveredKanbanWorkspaces,
+    error: kanbanWorkspaceError,
+    isFetching: isDiscoveringKanbanWorkspaces,
+    refetch: refetchKanbanWorkspaces,
+  } = useQuery({
+    queryKey: qk.kanbanWorkspaces(debouncedDiscoveryBaseUrl, debouncedDiscoveryPasscode),
+    queryFn: () => discoverKanbanWorkspaces(debouncedDiscoveryBaseUrl, debouncedDiscoveryPasscode),
+    enabled: debouncedDiscoveryBaseUrl.length > 0,
+    throwOnError: false,
+  });
 
   useEffect(() => {
     if (!backendSettings) return;
@@ -127,6 +170,9 @@ export default function Settings() {
       codexReasoningEffort: backendSettings.runtime.codexReasoningEffort as RuntimeDraft["codexReasoningEffort"],
       openaiBaseUrl: backendSettings.runtime.openaiBaseUrl,
       anthropicBaseUrl: backendSettings.runtime.anthropicBaseUrl,
+      kanbanBaseUrl: backendSettings.runtime.kanbanBaseUrl,
+      kanbanWorkspaceId: backendSettings.runtime.kanbanWorkspaceId,
+      kanbanPasscode: backendSettings.runtime.kanbanPasscode,
     });
     setSecretDraft({});
   }, [backendSettings]);
@@ -147,6 +193,9 @@ export default function Settings() {
           codexReasoningEffort: runtimeDraft.codexReasoningEffort,
           openaiBaseUrl: runtimeDraft.openaiBaseUrl,
           anthropicBaseUrl: runtimeDraft.anthropicBaseUrl,
+          kanbanBaseUrl: runtimeDraft.kanbanBaseUrl,
+          kanbanWorkspaceId: runtimeDraft.kanbanWorkspaceId,
+          kanbanPasscode: runtimeDraft.kanbanPasscode,
         },
         settingsScope,
         settingsProjectId,
@@ -156,7 +205,7 @@ export default function Settings() {
     } catch (error) {
       toast({
         title: "Runtime save failed",
-        description: error instanceof Error ? error.message : "Unable to save runtime settings.",
+        description: sanitizeErrorMessage(error),
       });
     } finally {
       setRuntimeBusy(false);
@@ -180,7 +229,7 @@ export default function Settings() {
     } catch (error) {
       toast({
         title: "Secret rotation failed",
-        description: error instanceof Error ? error.message : "Unable to rotate secrets.",
+        description: sanitizeErrorMessage(error),
       });
     } finally {
       setSecretBusy(false);
@@ -197,6 +246,30 @@ export default function Settings() {
       <PageBody>
         <div className="grid gap-4 xl:grid-cols-2">
           <Card className="space-y-4 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">Binding scope</h3>
+                <ScopeBadge value={settingsScope} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Kanban binding is edited in the same scope that owns the current console settings. Project-scoped settings stay attached to the selected project.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-md border px-3 py-2">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Current scope</div>
+                <div className="mt-1 text-sm font-medium capitalize">{settingsScope}</div>
+                <p className="mt-1 text-xs text-muted-foreground">This is the scope used by the binding and discovery fields below.</p>
+              </div>
+              <div className="rounded-md border px-3 py-2">
+                <div className="text-xs uppercase tracking-wider text-muted-foreground">Project</div>
+                <div className="mt-1 text-sm font-medium">{settingsScope === "project" ? selectedProject?.name ?? "Project missing" : "Not project-scoped"}</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {settingsScope === "project" ? "Only this project inherits the current Kanban binding." : "Global and user scopes do not narrow the binding to one project."}
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">Local console connectivity</h3>
@@ -347,7 +420,7 @@ export default function Settings() {
                   <ErrorState
                     className="mt-3"
                     title="No projects returned"
-                    message="The backend returned an empty projects list, so project-scoped workspace selection is unavailable."
+                    message={projectsError ? sanitizeErrorMessage(projectsError) : "The backend returned an empty projects list, so project-scoped workspace selection is unavailable."}
                   />
                 )}
               </div>
@@ -445,7 +518,27 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               These values persist through the backend. The form below is scoped to the current workspace and saves only the supported server-owned keys.
             </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Active scope:</span>
+              <ScopeBadge value={settingsScope} />
+              {settingsScope === "project" ? (
+                <span>
+                  binding for <span className="font-mono text-text-primary">{selectedProject?.name ?? settingsProjectId ?? "current project"}</span>
+                </span>
+              ) : (
+                <span>Kanban binding is easiest to reason about at project scope. Use the workspace selector above before editing Kanban fields.</span>
+              )}
+            </div>
+            <div className="rounded-md border border-status-orange/30 bg-status-orange/10 px-3 py-2 text-xs text-text-primary">
+              Kanban routing is saved with this Prompt Forge workspace scope. If you want a project-specific Kanban target, switch to the project workspace above first.
+            </div>
           </div>
+          {backendSettingsError && (
+            <ErrorState
+              title="Backend runtime settings unavailable"
+              message={sanitizeErrorMessage(backendSettingsError)}
+            />
+          )}
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1.5 md:col-span-2">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">Scope</Label>
@@ -472,6 +565,9 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, webhookUrl: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+              <p className="text-xs text-muted-foreground">
+                Blank inherits the backend default webhook instead of storing an empty override.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">LLM mode</Label>
@@ -537,6 +633,93 @@ export default function Settings() {
                 onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, anthropicBaseUrl: e.target.value } : cur))}
                 className="font-mono text-sm"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban base URL</Label>
+              <Input
+                value={runtimeDraft?.kanbanBaseUrl ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanBaseUrl: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                If Prompt Forge runs in Docker and Kanban runs on the host, prefer <span className="font-mono">http://host.docker.internal:3484</span> over <span className="font-mono">http://127.0.0.1:3484</span>.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban workspace ID</Label>
+              <Input
+                value={runtimeDraft?.kanbanWorkspaceId ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Kanban passcode</Label>
+              <Input
+                type="password"
+                value={runtimeDraft?.kanbanPasscode ?? ""}
+                disabled={!runtimeDraft || !canEditRuntime}
+                onChange={(e) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanPasscode: e.target.value } : cur))}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Required only when Kanban is bound to a remote host and shows a startup passcode. Prompt Forge uses it to verify once and reuse the returned session cookie.
+              </p>
+            </div>
+            <div className="space-y-1.5 md:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">Discovered Kanban workspaces</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!kanbanDiscoveryBaseUrl || isDiscoveringKanbanWorkspaces}
+                  onClick={() => void refetchKanbanWorkspaces()}
+                >
+                  {isDiscoveringKanbanWorkspaces ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+              <Select
+                value={runtimeDraft?.kanbanWorkspaceId ?? ""}
+                onValueChange={(value) => setRuntimeDraft((cur) => (cur ? { ...cur, kanbanWorkspaceId: value } : cur))}
+                disabled={!runtimeDraft || !canEditRuntime || (discoveredKanbanWorkspaces?.workspaces.length ?? 0) === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={kanbanDiscoveryBaseUrl ? "Select discovered workspace" : "Enter Kanban base URL first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(discoveredKanbanWorkspaces?.workspaces ?? []).map((workspace) => (
+                    <SelectItem key={workspace.workspaceId} value={workspace.workspaceId}>
+                      {workspace.name} · {workspace.workspaceId.slice(-8)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {kanbanWorkspaceError ? (
+                <p className="text-xs text-destructive">
+                  {sanitizeErrorMessage(kanbanWorkspaceError)}
+                </p>
+              ) : debouncedDiscoveryBaseUrl && isDiscoveringKanbanWorkspaces ? (
+                <p className="text-xs text-muted-foreground">Checking Kanban availability…</p>
+              ) : discoveredKanbanWorkspaces && discoveredKanbanWorkspaces.workspaces.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Kanban reachable. No workspaces found for the current base URL.</p>
+              ) : discoveredKanbanWorkspaces ? (
+                <div className="grid gap-2 text-xs text-muted-foreground">
+                  <div>
+                    Kanban status: <span className="font-mono">reachable</span>
+                  </div>
+                  <div>
+                    Current Kanban workspace: <span className="font-mono">{discoveredKanbanWorkspaces.currentWorkspaceId ?? "none"}</span>
+                  </div>
+                  <div>
+                    {discoveredKanbanWorkspaces.workspaces.length} workspace(s) discovered.
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Discovery runs against the current Kanban base URL.</p>
+              )}
             </div>
           </div>
           <div className="flex items-center justify-between gap-3">

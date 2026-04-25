@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { getDeliveryHistory, getQueueDepth, listDeliveries, listPromptGenerations, listIntakeNotes, listTargets, qk, rerouteDelivery, retryDelivery, updateDeliveryStatus } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { DataTable, type Column } from "@/components/pf/DataTable";
@@ -32,6 +33,8 @@ export default function Deliveries() {
   const [rerouteBusy, setRerouteBusy] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const selectedDeliveryId = searchParams.get("id");
   const { data, isLoading } = useQuery({ queryKey: qk.deliveriesList({ page }), queryFn: () => listDeliveries({ page }) });
   const { data: promptIndex } = useQuery({ queryKey: qk.promptList({ pageSize: 500 }), queryFn: () => listPromptGenerations({ pageSize: 500 }) });
   const { data: intakeIndex } = useQuery({ queryKey: qk.intakeList({ pageSize: 500 }), queryFn: () => listIntakeNotes({ pageSize: 500 }) });
@@ -45,6 +48,16 @@ export default function Deliveries() {
   const promptById = useMemo(() => new Map((promptIndex?.rows ?? []).map((prompt) => [prompt.id, prompt])), [promptIndex]);
   const noteById = useMemo(() => new Map((intakeIndex?.rows ?? []).map((note) => [note.id, note])), [intakeIndex]);
   const selectedPrompt = selected ? promptById.get(selected.prompt_generation_id) : undefined;
+
+  useEffect(() => {
+    if (!selectedDeliveryId || !data?.rows?.length) return;
+    if (selected?.id === selectedDeliveryId) return;
+    const match = data.rows.find((row) => row.id === selectedDeliveryId);
+    if (!match) return;
+    setSelected(match);
+    setStatusDraft(match.status);
+    setRerouteTargetId("");
+  }, [data?.rows, selected, selectedDeliveryId]);
 
   const noteLabel = (noteId: string) => noteById.get(noteId)?.note_relative_path ?? noteId.slice(-8);
   const promptLabel = (promptId: string) => {

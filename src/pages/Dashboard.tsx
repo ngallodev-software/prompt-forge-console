@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   getHealth, qk, listIntakeNotes, listPromptGenerations, listDeliveries,
   listFailedProcessingRuns, getQueueDepth, getSlaSummary, getProjectThroughput,
+  summarizeVoiceRouteFamilies,
 } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { HealthCard } from "@/components/pf/HealthCard";
@@ -20,9 +21,18 @@ export default function Dashboard() {
   const { data: failedDel } = useQuery({ queryKey: qk.deliveriesList({ failedOnly: true, pageSize: 5 }), queryFn: () => listDeliveries({ failedOnly: true, pageSize: 5 }) });
   const { data: failedRuns } = useQuery({ queryKey: qk.processingFailed, queryFn: listFailedProcessingRuns });
   const { data: stuck } = useQuery({ queryKey: qk.intakeList({ status: "error", pageSize: 5 }), queryFn: () => listIntakeNotes({ status: "error", pageSize: 5 }) });
+  const { data: intakeIndex } = useQuery({ queryKey: qk.intakeList({ pageSize: 500 }), queryFn: () => listIntakeNotes({ pageSize: 500 }) });
+  const { data: promptIndex } = useQuery({ queryKey: qk.promptList({ pageSize: 500 }), queryFn: () => listPromptGenerations({ pageSize: 500 }) });
   const { data: queueDepth } = useQuery({ queryKey: qk.queueDepth, queryFn: getQueueDepth });
   const { data: sla } = useQuery({ queryKey: qk.slaSummary, queryFn: getSlaSummary });
   const { data: throughput } = useQuery({ queryKey: qk.projectThroughput, queryFn: getProjectThroughput });
+  const noteById = new Map((intakeIndex?.rows ?? []).map((note) => [note.id, note]));
+  const promptById = new Map((promptIndex?.rows ?? []).map((prompt) => [prompt.id, prompt]));
+  const noteLabel = (noteId: string) => noteById.get(noteId)?.note_relative_path ?? noteId.slice(-8);
+  const promptLabel = (promptId: string) => {
+    const prompt = promptById.get(promptId);
+    return prompt ? `${prompt.prompt_type} · ${noteLabel(prompt.intake_note_id)}` : promptId.slice(-8);
+  };
 
   const totalQueue = queueDepth?.reduce((a, b) => a + b.queued_count, 0) ?? 0;
   const latencySamples = (sla ?? []).filter((s) => s.latency_ms !== null && s.latency_ms !== undefined);
@@ -32,6 +42,10 @@ export default function Dashboard() {
   const totalNotes = throughput?.reduce((a, b) => a + b.notes, 0) ?? 0;
   const totalPrompts = throughput?.reduce((a, b) => a + b.prompts, 0) ?? 0;
   const totalDeliveries = throughput?.reduce((a, b) => a + b.deliveries, 0) ?? 0;
+  const voiceRouting = summarizeVoiceRouteFamilies(intakeIndex?.rows ?? []);
+  const voiceDirect = voiceRouting.kanban;
+  const voiceFallback = voiceRouting.queueReview;
+  const voiceUnsupported = voiceRouting.unsupported + voiceRouting.outsideRoot;
 
   return (
     <>
@@ -59,21 +73,66 @@ export default function Dashboard() {
           <MetricCard label="Deliveries" value={totalDeliveries} Icon={Send} help={{ label: "Delivery count", content: "Downstream dispatch attempts, including completed and failed deliveries." }} />
         </div>
 
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-sm font-semibold">Voice routing rollup</h3>
+              <HelpTip label="Routing rollup help" content="Aggregate counts for recursive voice intake. This is a rollup only; the route policy still lives on the intake detail and settings surfaces." />
+            </div>
+            <span className="text-xs text-muted-foreground">Derived from Inbox/Voice paths</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Direct Kanban</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceDirect}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes that resolve to the Kanban family.</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Queue / review</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceFallback}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes that stay in the review lane.</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Unsupported</div>
+              <div className="mt-1 text-2xl font-semibold tabular-nums">{voiceUnsupported}</div>
+              <p className="mt-1 text-xs text-muted-foreground">Notes outside the known route families or outside Inbox/Voice.</p>
+            </div>
+          </div>
+        </Card>
+
         <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
           <NeedsAttentionPanel
             title="Requires review"
             help={{ label: "Review queue", content: "Prompt generations that still need operator or admin attention before they can be treated as done." }}
-            items={(review?.rows ?? []).map(p => ({ id: p.id, title: p.prompt_type, subtitle: p.id, to: `/pipeline/${p.intake_note_id}`, meta: <StatusBadge value={p.status} /> }))}
+            items={(review?.rows ?? []).map(p => ({
+              id: p.id,
+              title: `${p.prompt_type} · ${noteLabel(p.intake_note_id)}`,
+              subtitle: "Prompt generation awaiting operator review",
+              to: `/pipeline/${p.intake_note_id}`,
+              meta: <StatusBadge value={p.status} />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Failed deliveries"
             help={{ label: "Delivery failures", content: "Dispatch attempts that failed and may need retry, reroute, or target inspection." }}
-            items={(failedDel?.rows ?? []).map(d => ({ id: d.id, title: `→ ${d.destination}`, subtitle: d.id, to: `/deliveries`, meta: <StatusBadge value="failed" /> }))}
+            items={(failedDel?.rows ?? []).map(d => ({
+              id: d.id,
+              title: `${d.destination} · ${promptLabel(d.prompt_generation_id)}`,
+              subtitle: d.failure_text ?? "Failed dispatch",
+              to: `/deliveries`,
+              meta: <StatusBadge value="failed" />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Failed processing"
             help={{ label: "Processing failures", content: "Pipeline stages that stopped before completion and need trace inspection." }}
-            items={(failedRuns ?? []).slice(0, 5).map(r => ({ id: r.id, title: r.stage_name, subtitle: r.error_text ?? "", to: `/pipeline/${r.intake_note_id}`, meta: <StatusBadge value="failed" /> }))}
+            items={(failedRuns ?? []).slice(0, 5).map(r => ({
+              id: r.id,
+              title: `${r.stage_name} · ${noteLabel(r.intake_note_id)}`,
+              subtitle: r.error_text ?? "Run stopped early",
+              to: `/pipeline/${r.intake_note_id}`,
+              meta: <StatusBadge value="failed" />,
+            }))}
           />
           <NeedsAttentionPanel
             title="Stuck notes"

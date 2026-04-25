@@ -24,6 +24,8 @@ import type {
   DeliveryTarget,
   HealthSnapshot,
   BackendConsoleSettingsResponse,
+  BackendConsoleRuntimeSettingsPatch,
+  KanbanWorkspaceDiscoveryResponse,
   IntakeNote,
   LlmRun,
   LogEntry,
@@ -31,6 +33,8 @@ import type {
   PageResult,
   ProcessingRun,
   Project,
+  PromptKanbanApplyResponse,
+  PromptKanbanPreview,
   PromptGeneration,
   PromptTemplate,
   Rule,
@@ -55,6 +59,15 @@ const ENV_API_BASE = (import.meta.env.VITE_PROMPTFORGE_API_BASE as string | unde
 const ENV_BOOTSTRAP_PATH = (import.meta.env.VITE_PROMPTFORGE_BOOTSTRAP_PATH as string | undefined) || defaultConsoleSettings.bootstrapPath;
 export const HYDRATION_TTL_MS = Number(import.meta.env.VITE_PROMPTFORGE_HYDRATION_TTL_MS || 15_000);
 
+function getPollingMs(): number {
+  return useAppStore.getState().pollingMs;
+}
+
+function getHydrationTtlMs(): number {
+  const configured = getPollingMs();
+  return Number.isFinite(configured) && configured > 0 ? configured : HYDRATION_TTL_MS;
+}
+
 function getApiBase(): string {
   return useAppStore.getState().consoleSettings.apiBaseUrl.trim().replace(/\/+$/, "") || ENV_API_BASE;
 }
@@ -69,7 +82,7 @@ export function getConsoleRuntimeSnapshot() {
     bootstrapPath: getBootstrapPath(),
     defaultApiBaseUrl: ENV_API_BASE,
     defaultBootstrapPath: ENV_BOOTSTRAP_PATH,
-    hydrationTtlMs: HYDRATION_TTL_MS,
+    hydrationTtlMs: getHydrationTtlMs(),
     strictBackend: STRICT_BACKEND,
     mockDataEnabled: shouldUseMockData(),
   };
@@ -124,6 +137,31 @@ function buildQueryPath(path: string, params: Record<string, unknown>): string {
   return qs ? `${path}?${qs}` : path;
 }
 
+function humanizeKanbanError(error: unknown): Error {
+  const detail = error instanceof Error ? error.message : "Unknown Kanban error";
+  if (detail.includes("kanban_binding_invalid")) {
+    return new Error("Kanban base URL and workspace ID are required before using the Kanban harness.");
+  }
+  if (detail.includes("kanban_transport_error:ConnectError")) {
+    return new Error(
+      "Prompt Forge could not reach Kanban. Check the Kanban base URL, confirm Kanban is running, and use http://host.docker.internal:3484 when Prompt Forge runs in Docker against a host Kanban.",
+    );
+  }
+  if (detail.includes("kanban_http_error:")) {
+    return new Error(`Kanban returned an HTTP error. ${detail}`);
+  }
+  if (detail.includes("kanban_passcode_rejected")) {
+    return new Error("Kanban rejected the configured passcode. Update the Kanban passcode in Settings and try again.");
+  }
+  if (detail.includes("kanban_http_error:401") || detail.includes("Authentication required")) {
+    return new Error("Kanban requires authentication. Enter the current Kanban passcode in Settings, then refresh workspace discovery.");
+  }
+  if (detail.includes("kanban_response_invalid")) {
+    return new Error("Kanban responded with an unexpected payload.");
+  }
+  return error instanceof Error ? error : new Error(detail);
+}
+
 interface BackendPaginatedResponse<T> {
   pagination: { total: number; limit: number; offset: number; has_more: boolean };
   [key: string]: unknown;
@@ -152,7 +190,7 @@ async function fetchPageResult<T>(path: string, itemsKey: string, pageSize: numb
 }
 
 async function ensureHydrated(force = false): Promise<void> {
-  const stale = Date.now() - lastHydrationAt > HYDRATION_TTL_MS;
+  const stale = Date.now() - lastHydrationAt > getHydrationTtlMs();
   if (!force && !stale && lastHydrationAt > 0) return;
   if (hydrationInFlight) return hydrationInFlight;
 
@@ -222,6 +260,7 @@ export const qk = {
   templates: (params: unknown) => ["pf", "templates", "list", params] as const,
   targets: (type?: PfTargetType) => ["pf", "targets", type] as const,
   targetHealth: (id: string) => ["pf", "targets", "health", id] as const,
+  kanbanWorkspaces: (baseUrl: string, passcode = "") => ["pf", "kanban", "workspaces", baseUrl, passcode] as const,
   settings: (scope?: PfScope, projectId?: string | null) => ["pf", "settings", scope ?? "global", projectId ?? null] as const,
   logsList: (params: unknown) => ["pf", "logs", "list", params] as const,
   errorFingerprints: ["pf", "logs", "fingerprints"] as const,
@@ -1014,6 +1053,9 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
         codexReasoningEffort: "medium",
         openaiBaseUrl: "https://api.openai.com/v1",
         anthropicBaseUrl: "https://api.anthropic.com",
+        kanbanBaseUrl: "http://127.0.0.1:3484",
+        kanbanWorkspaceId: "",
+        kanbanPasscode: "",
       },
       secrets: {},
       permissions: {
@@ -1026,7 +1068,7 @@ export async function getConsoleSettings(scope?: PfScope, projectId?: string | n
   }
 }
 
-export async function patchConsoleRuntimeSettings(runtime: Record<string, unknown>, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
+export async function patchConsoleRuntimeSettings(runtime: BackendConsoleRuntimeSettingsPatch, scope?: PfScope, projectId?: string | null): Promise<BackendConsoleSettingsResponse> {
   try {
     return await postJson<BackendConsoleSettingsResponse>("/console/settings/runtime", {
       scope: scope ?? "global",
@@ -1227,6 +1269,96 @@ export async function changePromptPriority(id: string, priority: string) {
   await delay(140);
   return { ok: true, id, priority };
 }
+
+function buildMockPromptKanbanPreview(id: string): PromptKanbanPreview {
+  const prompt = promptGenerations.find((row) => row.id === id);
+  const promptText = prompt?.final_prompt_markdown.trim() ?? "";
+  const build = prompt && promptText
+    ? {
+        ok: true,
+        manifest: {
+          version: "v1" as const,
+          tasks: [{ externalTaskKey: `pf:pg:${id}`, prompt: promptText }],
+          links: [],
+        },
+        errors: [],
+      }
+    : {
+        ok: false,
+        manifest: null,
+        errors: [{ code: "kanban_manifest_missing_prompt", message: "Prompt generation does not have final_prompt_markdown content." }],
+      };
+  return {
+    promptGenerationId: id,
+    projectId: null,
+    sourceStatus: prompt?.status ?? "created",
+    kanbanBaseUrl: "http://127.0.0.1:3484",
+    kanbanWorkspaceId: "",
+    kanbanPasscode: "",
+    build,
+  };
+}
+
+export async function previewPromptKanbanImport(id: string): Promise<PromptKanbanPreview> {
+  try {
+    return await fetchJson<PromptKanbanPreview>(`/console/prompts/${id}/kanban/preview`);
+  } catch (error) {
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban preview", normalized);
+    await delay(120);
+    return buildMockPromptKanbanPreview(id);
+  }
+}
+
+export async function applyPromptToKanban(id: string): Promise<PromptKanbanApplyResponse> {
+  try {
+    return await postJson<PromptKanbanApplyResponse>(`/console/prompts/${id}/kanban/apply`);
+  } catch (error) {
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban apply", normalized);
+    await delay(160);
+    const preview = buildMockPromptKanbanPreview(id);
+    return {
+      promptGenerationId: preview.promptGenerationId,
+      projectId: preview.projectId,
+      kanbanBaseUrl: preview.kanbanBaseUrl,
+      kanbanWorkspaceId: preview.kanbanWorkspaceId,
+      manifest: preview.build.manifest,
+      result: preview.build.ok && preview.build.manifest
+        ? {
+            version: "v1",
+            ok: true,
+            applied: true,
+            taskMappings: [{ externalTaskKey: `pf:pg:${id}`, taskId: "mock-task-1", columnId: "backlog", created: true }],
+            linkResults: [],
+            startResults: [],
+          }
+        : null,
+      preflightErrors: preview.build.errors,
+    };
+  }
+}
+
+export async function discoverKanbanWorkspaces(baseUrl: string, passcode = ""): Promise<KanbanWorkspaceDiscoveryResponse> {
+  try {
+    return await fetchJson<KanbanWorkspaceDiscoveryResponse>(buildQueryPath("/console/kanban/workspaces", {
+      base_url: baseUrl,
+      passcode,
+    }));
+  } catch (error) {
+    const normalized = humanizeKanbanError(error);
+    if (!shouldUseMockData()) throw normalized;
+    logBackendFallback("promptforge kanban workspace discovery", normalized);
+    await delay(120);
+    return {
+      currentWorkspaceId: null,
+      workspaces: [],
+    };
+  }
+}
+
 export async function archiveNote(id: string) {
   try {
     const response = await postJson<{ ok?: boolean }>(`/console/intake/${id}/archive`, {}, "PATCH");

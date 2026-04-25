@@ -11,14 +11,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { QueryInspector } from "@/components/pf/QueryInspector";
 import { OpsSurfaceIntro } from "@/components/pf/OpsSurfaceIntro";
 import type { LogEntry } from "@/services/promptforge/types";
+import { useAppStore } from "@/stores/app-store";
 
 export default function Logs() {
+  const polling = useAppStore((s) => s.pollingMs);
   const [service, setService] = useState<LogEntry["service"] | undefined>(undefined);
   const [level, setLevel] = useState<LogEntry["level"] | undefined>(undefined);
   const [search, setSearch] = useState("");
 
   const filters = { service, level, search, pageSize: 500 };
-  const { data } = useQuery({ queryKey: qk.logsList(filters), queryFn: () => listLogs(filters), refetchInterval: 6000 });
+  const { data } = useQuery({ queryKey: qk.logsList(filters), queryFn: () => listLogs(filters), refetchInterval: polling });
   const { data: fps } = useQuery({ queryKey: qk.errorFingerprints, queryFn: () => getErrorFingerprints(8) });
 
   return (
