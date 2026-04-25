@@ -11,10 +11,22 @@ import { FrontmatterCompare } from "@/components/pf/FrontmatterCompare";
 import { MarkdownPreview } from "@/components/pf/MarkdownPreview";
 import { JsonViewer } from "@/components/pf/JsonViewer";
 import { RelatedArtifactsPanel } from "@/components/pf/RelatedArtifactsPanel";
+import { RoutePreview } from "@/components/pf/RoutePreview";
 import { LoadingState } from "@/components/pf/LoadingState";
 import { EmptyState } from "@/components/pf/EmptyState";
-import { ArrowLeft, Download, GitBranch, RefreshCw, Route } from "lucide-react";
+import { ArrowLeft, Download, GitBranch } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+function resolveScope(
+  settings: { scope: "global" | "user" | "project"; project_id: string | null } | undefined,
+  projectName: string | null,
+) {
+  return {
+    kind: settings?.scope === "project" ? "project" : "global",
+    projectId: settings?.project_id ?? null,
+    projectName: settings?.scope === "project" ? projectName : null,
+  };
+}
 
 export default function IntakeDetail() {
   const { id = "" } = useParams();
@@ -23,7 +35,7 @@ export default function IntakeDetail() {
   const { data: projects = [] } = useQuery({ queryKey: qk.projects, queryFn: listProjects });
   const noteScope = note?.project_id ? "project" : "global";
   const noteProjectId = note?.project_id ?? null;
-  const { data: backendSettings } = useQuery({
+  const { data: settings } = useQuery({
     queryKey: qk.settings(noteScope, noteProjectId),
     queryFn: () => getConsoleSettings(noteScope, noteProjectId),
     enabled: Boolean(note),
@@ -34,9 +46,7 @@ export default function IntakeDetail() {
   if (!note) return <PageBody><EmptyState title="Note not found" /></PageBody>;
 
   const currentProject = projects.find((project) => project.id === note.project_id) ?? null;
-  const kanbanReady = Boolean(backendSettings?.runtime.kanbanBaseUrl.trim() && backendSettings?.runtime.kanbanWorkspaceId.trim());
-  const route = describeVoiceRoute(note, kanbanReady);
-  const deliveryId = typeof note.frontmatter_current.delivery_id === "string" ? note.frontmatter_current.delivery_id : null;
+  const isKanbanReady = Boolean(settings?.runtime.kanbanBaseUrl.trim() && settings?.runtime.kanbanWorkspaceId.trim());
 
   const exportBundle = () => {
     const blob = new Blob([JSON.stringify({ note, ...lineage }, null, 2)], { type: "application/json" });
@@ -66,76 +76,13 @@ export default function IntakeDetail() {
       <PageBody>
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
-            <Card className="space-y-4 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Route className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold">Route preview</h3>
-                </div>
-                <StatusBadge
-                  value={route.routeStatusLabel}
-                  size="md"
-                  tone={route.routeStatus === "direct_kanban" ? "success" : route.routeStatus === "queue_review" ? "warn" : "danger"}
-                />
-              </div>
-              <p className="text-sm text-muted-foreground">{route.routeSummary}</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Source folder</div>
-                  <div className="mt-1 font-mono text-sm">{route.sourceFolder}</div>
-                </div>
-                <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Route family</div>
-                  <div className="mt-1 font-mono text-sm">{route.routeFamily ?? "unsupported"}</div>
-                </div>
-                <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Route target</div>
-                  <div className="mt-1 font-mono text-sm">{route.routeTarget ?? "—"}</div>
-                </div>
-                <div className="rounded-md border px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Route context</div>
-                  <div className="mt-1 font-mono text-sm">{route.routeContext ?? "—"}</div>
-                </div>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border bg-surface-1/60 px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Fallback / replay</div>
-                  <div className="mt-1 text-sm">{route.replayState}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Replayable: <span className="font-medium text-foreground">{route.replayable ? "yes" : "no"}</span>
-                  </div>
-                </div>
-                <div className="rounded-md border bg-surface-1/60 px-3 py-2">
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">Kanban binding</div>
-                  <div className="mt-1 text-sm">{kanbanReady ? "Ready" : "Unavailable"}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    <span className="font-mono">{backendSettings?.runtime.kanbanBaseUrl?.trim() || "unset"}</span>
-                    {" · "}
-                    <span className="font-mono">{backendSettings?.runtime.kanbanWorkspaceId?.trim() || "unset"}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link to={`/pipeline/${note.id}`}>
-                    <GitBranch className="h-3.5 w-3.5" />
-                    Open pipeline
-                  </Link>
-                </Button>
-                {deliveryId && (
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={`/deliveries?id=${deliveryId}`}>
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      Review delivery
-                    </Link>
-                  </Button>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <ScopeBadge value={noteScope} />
-                {currentProject ? <span>{currentProject.name}</span> : <span>Global fallback scope</span>}
-              </div>
-            </Card>
+            <RoutePreview
+              note={note}
+              route={describeVoiceRoute(note, isKanbanReady)}
+              kanbanReady={isKanbanReady}
+              kanbanBinding={{ baseUrl: settings?.runtime.kanbanBaseUrl, workspaceId: settings?.runtime.kanbanWorkspaceId }}
+              scope={resolveScope(settings, currentProject?.name ?? null)}
+            />
 
             <Tabs defaultValue="body">
               <TabsList><TabsTrigger value="body">Body</TabsTrigger><TabsTrigger value="frontmatter">Frontmatter</TabsTrigger><TabsTrigger value="metadata">Metadata</TabsTrigger></TabsList>

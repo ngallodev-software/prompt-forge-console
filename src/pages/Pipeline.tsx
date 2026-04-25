@@ -1,13 +1,14 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { getNoteLineage } from "@/services/promptforge";
+import { describeVoiceRoute, getConsoleSettings, getNoteLineage } from "@/services/promptforge";
 import { PageBody, PageHeader } from "@/components/shell/PageHeader";
 import { TimelineTrace, type TimelineItem } from "@/components/pf/TimelineTrace";
 import { DiffViewer } from "@/components/pf/DiffViewer";
 import { JsonViewer } from "@/components/pf/JsonViewer";
 import { RootCausePanel } from "@/components/pf/RootCausePanel";
 import { RelatedArtifactsPanel } from "@/components/pf/RelatedArtifactsPanel";
+import { RoutePreview } from "@/components/pf/RoutePreview";
 import { LoadingState } from "@/components/pf/LoadingState";
 import { StatusBadge, statusTone } from "@/components/pf/StatusBadge";
 import { QueryInspector } from "@/components/pf/QueryInspector";
@@ -21,6 +22,14 @@ import { cn } from "@/lib/utils";
 import { HelpTip } from "@/components/pf/HelpTip";
 
 const expectedProcessingStages = ["preprocess", "validate", "render", "prepare-delivery"] as const;
+
+function resolveScope(settings: { scope: "global" | "user" | "project"; project_id: string | null } | undefined) {
+  return {
+    kind: settings?.scope === "project" ? "project" : "global",
+    projectId: settings?.project_id ?? null,
+    projectName: null,
+  };
+}
 
 function parseRuleId(errorText?: string | null) {
   return errorText?.match(/rule_id=([^\s]+)/)?.[1];
@@ -37,6 +46,17 @@ export default function Pipeline() {
     queryFn: () => getNoteLineage(targetId!),
     enabled: !!targetId,
   });
+
+  const selectedNote = data?.note ?? null;
+  const noteScope = selectedNote?.project_id ? "project" : "global";
+  const noteProjectId = selectedNote?.project_id ?? null;
+  const { data: settings } = useQuery({
+    queryKey: ["pf", "settings", noteScope, noteProjectId],
+    queryFn: () => getConsoleSettings(noteScope, noteProjectId),
+    enabled: Boolean(selectedNote),
+    throwOnError: false,
+  });
+  const isKanbanReady = Boolean(settings?.runtime.kanbanBaseUrl.trim() && settings?.runtime.kanbanWorkspaceId.trim());
 
   const [selectedRevId, setSelectedRevId] = useState<string | null>(null);
   const selectedRev = data?.revisions.find(r => r.id === selectedRevId);
@@ -170,6 +190,15 @@ export default function Pipeline() {
         />
         <PageBody>
           <QueryInspector />
+          {selectedNote && (
+            <RoutePreview
+              note={selectedNote}
+              route={describeVoiceRoute(selectedNote, isKanbanReady)}
+              kanbanReady={isKanbanReady}
+              kanbanBinding={{ baseUrl: settings?.runtime.kanbanBaseUrl, workspaceId: settings?.runtime.kanbanWorkspaceId }}
+              scope={resolveScope(settings)}
+            />
+          )}
           <OpsSurfaceIntro
             eyebrow="Workflow guide"
             title="How to use the pipeline trace"
