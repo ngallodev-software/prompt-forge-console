@@ -93,4 +93,4 @@ It does not cover:
 ## Cross-References
 
 - `context/refs/kanban-local-harness.md`
-- `/lump/apps/prompt-forge/context/kits/cavekit-kanban-task-creation-harness.md`
+- `Prompt Forge backend repository: context/kits/cavekit-kanban-task-creation-harness.md`

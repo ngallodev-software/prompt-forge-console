@@ -1,6 +1,6 @@
 # Settings Page Review + Backend Follow-Up Prompt
 
-You are working in the frontend repo at `/lump/apps/prompt-forge-console`.
+You are working in the frontend repo at `this repository`.
 
 Goal
 - Perform a thorough review of the Settings page and implement it so it is clearly functional, editable, and not presentation-only.
@@ -100,7 +100,7 @@ After the frontend changes are complete, create a markdown artifact in the repo 
 
 - `docs/phased-impl/settings-backend-support-prompt.md`
 
-This artifact must be a standalone prompt for the backend repo at `/lump/apps/prompt-forge` that instructs a backend agent to implement the server-side support required by the frontend settings changes.
+This artifact must be a standalone prompt for the backend repo at `the Prompt Forge backend repository` that instructs a backend agent to implement the server-side support required by the frontend settings changes.
 
 The backend prompt artifact must include:
 - the exact frontend behavior that now needs server support

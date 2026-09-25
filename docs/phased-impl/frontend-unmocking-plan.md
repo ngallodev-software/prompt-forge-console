@@ -1,6 +1,6 @@
 # Frontend Unmocking Plan
 
-You are working in the frontend repo at `/lump/apps/prompt-forge-console`.
+You are working in the frontend repo at `this repository`.
 
 Goal
 - Convert the console from a bootstrap-plus-fallback app into a backend-driven app for all features the backend now supports.

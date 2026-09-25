@@ -1,6 +1,6 @@
 # Backend Gap Closure Plan
 
-You are working in the frontend repo at `/lump/apps/prompt-forge-console`.
+You are working in the frontend repo at `this repository`.
 
 Goal
 - Close the backend and database gaps that still force the console to rely on bootstrap hydration, mock fallbacks, or local-only draft flows.
@@ -333,6 +333,6 @@ Rollout notes
 - Leave frontend-local settings in the browser store unless there is a clear server-side owner.
 
 Repository handoff note
-- This plan is for the backend repo at `/lump/apps/prompt-forge`.
+- This plan is for the backend repo at `the Prompt Forge backend repository`.
 - Do not redesign the frontend in the backend implementation step.
 - Preserve existing frontend query key shapes and response field names where possible.

@@ -1,7 +1,7 @@
 # PromptForge Cross-System Architecture
 
 ## Modeling Assumptions
-- Directly grounded: Obsidian vault intake, watcher-driven ingestion, backend-owned deterministic processing, Postgres as canonical store, console as operator control plane, optional n8n webhook orchestration, optional LLM usage, and delivery dispatch are all evidenced by `/lump/apps/prompt-forge/README.md`, `/lump/apps/prompt-forge/API_COMPAT.md`, `/lump/apps/prompt-forge/docs/planning/promptforge_backend_architecture_diagrams.md`, watcher/services code, and this repo's console architecture and API client.
+- Directly grounded: Obsidian vault intake, watcher-driven ingestion, backend-owned deterministic processing, Postgres as canonical store, console as operator control plane, optional n8n webhook orchestration, optional LLM usage, and delivery dispatch are all evidenced by `Prompt Forge backend repository README.md`, `Prompt Forge backend repository API_COMPAT.md`, `Prompt Forge backend repository docs/planning/promptforge_backend_architecture_diagrams.md`, watcher/services code, and this repo's console architecture and API client.
 - Minimally inferred: "PromptForge watcher" is modeled as the combined watcher runtime plus its repository/writeback/webhook responsibilities; "backend services" is modeled as the FastAPI plus deterministic pipeline plus console API plus dispatch layer because the code currently groups those concerns in one Python service runtime.
 - Future-only: hardened auth/authz, stronger operator separation, richer observability, more complete delivery transports, and multi-user support are proposed only. They do not exist as current-state guarantees.
 

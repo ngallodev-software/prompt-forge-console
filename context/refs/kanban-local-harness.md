@@ -31,22 +31,22 @@ Useful reuse pattern:
 ## Confirmed Backend Facts
 
 - backend canonical contracts:
-  - `/lump/apps/prompt-forge/promptforge_services/models.py`
+  - `Prompt Forge backend repository: promptforge_services/models.py`
 - backend compile surface:
-  - `/lump/apps/prompt-forge/promptforge_services/api.py`
+  - `Prompt Forge backend repository: promptforge_services/api.py`
 - backend operator mutation surface:
-  - `/lump/apps/prompt-forge/promptforge_services/console_api.py`
+  - `Prompt Forge backend repository: promptforge_services/console_api.py`
 
 ## Confirmed Kanban Facts
 
 Primary import seam:
 
-- `/lump/apps/kanban/src/trpc/workspace-api.ts`
+- `Kanban repository: src/trpc/workspace-api.ts`
   - `workspace.importTasks`
 
 CLI wrapper:
 
-- `/lump/apps/kanban/src/commands/task.ts`
+- `Kanban repository: src/commands/task.ts`
   - `task import --file <path>`
 
 ## Planning Implication
